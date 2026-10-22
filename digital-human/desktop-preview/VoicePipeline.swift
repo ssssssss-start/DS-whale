@@ -112,6 +112,7 @@ final class VoicePipeline: NSObject, AVAudioPlayerDelegate {
         init(_ sentence: Sentence, _ audio: PCMOutput, _ began: Double) { self.sentence = sentence; self.audio = audio; self.began = began }
     }
     private let socket = VoiceSocket()
+    let body = BodyControl()
     private let session: URLSession
     private let makePCMPlayer: () -> PCMOutput
     private let makeDoubaoStream: () -> DoubaoDuplexStream
@@ -157,6 +158,9 @@ final class VoicePipeline: NSObject, AVAudioPlayerDelegate {
     private var callDeadline = 0.0
     private var callPaused = false
     var onCallState: (([String: Any]) -> Void)?
+    var onNativeMessage: (([String:Any]) -> Void)?
+    var onHeartbeat: (() -> Void)?
+    func sendNative(_ message: [String:Any]) { socket.send(message) }
     var onAcknowledgement: ((String, String) -> Void)?
     var onInbox: (([String: Any]) -> Void)?
     var onProactivePlayback: ((String) -> Void)?
@@ -178,6 +182,8 @@ final class VoicePipeline: NSObject, AVAudioPlayerDelegate {
     func publishState() {
         var state = proactiveSettings.snapshot(playing: isPlaying)
         state["voiceProtocol"] = 1
+        state["bodyProtocol"] = 1
+        state["bodyActions"] = body.actions
         state["voiceReady"] = provider == .doubao && !password.isEmpty && !muted && proactiveSettings.visible
         socket.send(state)
     }
@@ -205,6 +211,7 @@ final class VoicePipeline: NSObject, AVAudioPlayerDelegate {
     private func endCall() {
         cancel(); callState("closed"); callID = nil; callPaused = false; callDeadline = 0
     }
+    func endVoiceCall() { endCall() }
     func settingsChanged() {
         if let reason = proactiveSettings.reason {
             for event in proactiveQueue { acknowledge(event, "dropped", reason) }
@@ -271,6 +278,7 @@ final class VoicePipeline: NSObject, AVAudioPlayerDelegate {
             guard let self else { return }
             self.expireCall(); self.expireWarmConnection()
             self.proactiveSettings.expire(); self.settingsChanged()
+            self.onHeartbeat?()
         }
     }
     func connect() {
@@ -336,6 +344,11 @@ final class VoicePipeline: NSObject, AVAudioPlayerDelegate {
     }
     func receive(_ object: [String: Any]) {
         guard let kind = object["type"] as? String else { return }
+        if kind == "native_state" { onNativeMessage?(object); return }
+        if kind == "body_action" {
+            if let result = body.receive(object) { socket.send(result) }
+            return
+        }
         expireCall()
         if kind == "call_open", let id = object["id"] as? String, id.count <= 200 {
             if callID != nil && callID != id { callState("failed",id:id); return }

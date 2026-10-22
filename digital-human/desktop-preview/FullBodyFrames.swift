@@ -81,7 +81,7 @@ struct FullBodyFrames {
         }
         // A shared crop preserves the original registration and feet position across all five drawings.
         let cropBounds = bounds.insetBy(dx: -2, dy: -2).intersection(CGRect(x: 0, y: 0, width: width, height: height))
-        images = cutouts.compactMap { $0.cropping(to: cropBounds) }
+        images = cutouts.compactMap { $0.cropping(to: cropBounds) }.map(cleanHairEdges)
         guard images.count == 5 else { return nil }
     }
 }

@@ -3,6 +3,9 @@ import { Phrases } from './phrases.js'
 import { connectDesktop } from './transport.js'
 import { createBindingRoute, findSession } from './binding.js'
 import { VoiceCalls } from './calls.js'
+import { Embodiment } from './embodiment.js'
+import { NativeCall } from './native-call.js'
+import { randomUUID } from 'node:crypto'
 export { socketPath } from './transport.js'
 
 export const name = 'whale-voice'
@@ -94,11 +97,21 @@ export function apply(ctx) {
   const enqueue = work => serialize(work).catch(() => transport.send({ type:'host_status', text:'Proactive operation failed; check the selected session.' }))
   const transport = connectDesktop(message => {
     calls.receive(message)
+    body.receive(message)
+    if (message.type === 'native_call') void native.receive(message).catch(() => native.fail())
     if (message.type === 'desktop_state') enqueue(async () => { transport.send({type:'host_status',text:hostStatus}); await host?.engine.updateDesktop(message) })
     if (message.type === 'control') enqueue(async () => { await host?.engine.control(message); bridge.syncBinding(calls.sessionId ?? host?.engine.state.settings.followedSession) })
     if (message.type === 'ack') enqueue(() => host?.engine.ack(message))
   })
   const calls = new VoiceCalls({send:command => transport.send(command),cancel:id => bridge.cancelSession(id)})
+  const native = new NativeCall({ calls, send:command => transport.send(command),
+    target:() => { if (!host) throw new Error('Plugin not ready'); return host.nativeTarget() },
+    speech:() => ctx.get?.('speechController'),
+    submit:(sessionId,text,signal) => host.controller.prompt({requestId:randomUUID(),sessionId,mode:'queue',content:[{type:'text',text}]},signal),
+  })
+  calls.onChange = () => native.sync()
+  const body = new Embodiment({ send: command => transport.send(command),
+    owner: () => calls.sessionId ?? host?.engine.state.settings.followedSession, call: () => calls.call })
   const send = command => { calls.track(command); return transport.send(command) }
   const bridge = createBridge(send,Date.now,id => {
     const state = host?.engine.state
@@ -117,7 +130,7 @@ export function apply(ctx) {
   const attach = async sub => {
     try {
       const { installHost } = await import('./host.js')
-      const installed = await installHost(sub, send)
+      const installed = await installHost(sub, send, body)
       if (disposed) { await installed.close(); return }
       host = installed
       sub.effect(() => () => { if (host === installed) host = undefined; return installed.close() }, 'whale proactive state')
@@ -129,6 +142,11 @@ export function apply(ctx) {
     }
   }
   ctx.inject(['storageDomain', 'tools', 'sessionController'], attach)
+  ctx.inject(['systemPrompt'], sub => {
+    sub.effect(() => sub.systemPrompt.section({ name:'whale-embodiment', order:650, interpolate:false,
+      text: context => body.prompt(context?.agent?.session?.id),
+    }), 'whale hearing and body context')
+  })
   ctx.inject(['connection'], sub => {
     const ready = () => { if (!host) throw new Error('Plugin not ready'); return host }
     sub.effect(() => sub.connection.fetch.register(createBindingRoute({
@@ -137,7 +155,7 @@ export function apply(ctx) {
       call: body => calls.handle(body, id => findSession(ready().controller,id)),
     })), 'whale conversation binding route')
   })
-  const timer = setInterval(() => { calls.tick(); enqueue(() => host?.engine.tick()) }, 1000)
+  const timer = setInterval(() => { calls.tick(); native.tick(); enqueue(() => host?.engine.tick()) }, 1000)
   timer.unref?.()
-  ctx.effect(() => () => { disposed = true; clearInterval(timer); calls.end(); bridge.close(); transport.close() }, 'whale voice lifecycle')
+  ctx.effect(() => () => { disposed = true; clearInterval(timer); native.close(); calls.end(); body.close(); bridge.close(); transport.close() }, 'whale voice lifecycle')
 }

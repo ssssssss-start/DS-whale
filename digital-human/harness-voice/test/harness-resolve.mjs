@@ -2,7 +2,8 @@
 import { registerHooks, createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import { resolve } from 'node:path'
-const requireFromHarness = createRequire(pathToFileURL(resolve(import.meta.dirname, '../../../deepseek-harness/packages/bundle/base/package.json')))
+const harness = process.env.DSH_HARNESS ?? resolve(import.meta.dirname, '../../../deepseek-harness')
+const requireFromHarness = createRequire(pathToFileURL(resolve(harness, 'packages/bundle/base/package.json')))
 const root = pathToFileURL(resolve(import.meta.dirname, '..')).href + '/'
 registerHooks({ resolve(specifier, context, next) {
   if (context.parentURL?.startsWith(root) && (specifier.startsWith('@deepseek-ai/') || specifier === 'zod')) {

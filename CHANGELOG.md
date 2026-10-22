@@ -1,5 +1,16 @@
 # Changelog
 
+## Desktop 0.6.0 / Voice plugin 0.5.0 — 2026-10-22
+
+- Start and end a native voice call by double-clicking the character, without opening a chat page; use a bound Harness session or create and reuse a normal voice session.
+- Capture bounded PCM16 speech in memory and use the configured public Harness recognition and Session prompt APIs. Pause, hangup, mute, hide, sleep, device changes and stale callbacks release or protect microphone ownership.
+- Add a readable attached phone badge with connecting, listening, recognition, thinking, speaking and paused states, a hangup button and state-linked character poses.
+- Give the owning Agent ASR-aware hearing context, digital-body identity and receipt-based `whale_body` gesture/expression controls. Preserve the Bot's name, role and persistent binding.
+- Update the optional DS Bot integration patch with explicit ASR input provenance and include its generated client bundle.
+- Include desktop 0.5.3 hair-edge cleanup and its image checks, previously absent from this publication copy.
+- Record versions, setup instructions, screenshots and [Chinese release notes](CHANGELOG.zh.md).
+- Validation: 36 voice-plugin tests, 318 DS Bot tests, public API integration, desktop build/self-checks and patch applicability. Real microphone/model/paid-TTS integration is unverified; the broad DS Bot mock smoke still fails at the Chief question-card step. No Harness core patch or automatic updater is included.
+
 ## Desktop 0.5.2 — 2026-10-22
 
 - Restore hidden hair behind the moving tail with a fixed, feathered background patch.

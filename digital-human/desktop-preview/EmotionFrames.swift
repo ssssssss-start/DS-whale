@@ -9,7 +9,7 @@ final class EmotionFrames {
                 let name = String(format:"%@-%02d",behavior.rawValue,step)
                 guard let url = Bundle.main.url(forResource:name,withExtension:"png",subdirectory:"emotions-v1"),
                       let image = NSImage(contentsOf:url) else { break }
-                let texture = SKTexture(image:image); texture.filteringMode = .linear; sequence.append(texture)
+                let texture = SKTexture(cgImage:cleanHairEdges(image.cgImage(forProposedRect:nil,context:nil,hints:nil)!)); texture.filteringMode = .linear; sequence.append(texture)
             }
             if sequence.count == 33 { frames[behavior] = sequence }
         }

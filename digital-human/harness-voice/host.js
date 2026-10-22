@@ -1,7 +1,8 @@
 import { Proactive } from './proactive.js'
 import { findSession } from './binding.js'
+import { bodyActions } from './embodiment.js'
 
-export async function installHost(ctx, send) {
+export async function installHost(ctx, send, body) {
   const [{ defineDomain, domainTable }, { z }, { defineTool }] = await Promise.all([
     import('@deepseek-ai/dsh-storage-domain'), import('zod'), import('@deepseek-ai/dsh-tools'),
   ])
@@ -34,6 +35,10 @@ export async function installHost(ctx, send) {
     if (!engine.state.settings.followedSession || exec.agent?.session?.id !== engine.state.settings.followedSession) throw new Error('Select this session using Follow Next Conversation in the Whale menu first')
   }
   const disposers = []
+  if (body) disposers.push(register({ name:'whale_body', description:'Sense and move your Whale Companion digital body. Use status to inspect connection, hearing input and supported actions. greeting waves hello; poke and headpat perform their reactions; shy, surprised, sad and sleepy show expressions; idle returns to rest. Only the bound session or current Whale call owns this body. Actions are silent; wait for the desktop receipt before describing a movement as accepted. An accepted command does not prove animation completion.',
+    parameters:{ action:{type:'string',required:true,enum:['status',...bodyActions]} },
+    async execute(args,exec) { return JSON.stringify(await body.execute(args.action,exec.agent?.session?.id,exec.signal)) },
+  }))
   disposers.push(register({ name: 'whale_task_evidence', description: 'List tool result sequence ids observed in the current followed task. These references support a whale_report_task claim; they do not prove success.', parameters: {},
     execute(_args, exec) { requireSelected(exec); return JSON.stringify([...engine.tools.get(exec.agent.session.id) || []]) } }))
   disposers.push(register({ name: 'whale_report_task', description: 'Report the followed task result with observed tool/result sequence ids. This is an attributed agent report, not independently verified success. Only report after the requested work is done or terminally failed.',
@@ -56,6 +61,18 @@ export async function installHost(ctx, send) {
     } }))
   await engine.persist()
   return { engine, controller:ctx.sessionController,
+    async nativeTarget() {
+      const selected = engine.state.settings.followedSession || engine.state.nativeSession
+      if (selected) {
+        const session = await findSession(ctx.sessionController,selected)
+        if (session.running) throw new Error('The selected conversation is busy.')
+        return session.id
+      }
+      const created = await ctx.sessionController.create({})
+      await ctx.sessionController.rename({sessionId:created.sessionId,title:'Whale Voice Conversation'})
+      engine.state.nativeSession = created.sessionId; await engine.persist()
+      return created.sessionId
+    },
     async bindSession({ sessionId, title }) {
       if (sessionId === engine.state.companionSession) throw Object.assign(new Error('Choose your conversation, not the reminder delivery session.'),{status:400})
       const session = await findSession(ctx.sessionController,sessionId)

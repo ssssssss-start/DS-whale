@@ -5,16 +5,17 @@ const LEASE = 15000
 
 // A call borrows speech without changing the persisted conversation binding.
 export class VoiceCalls {
-  constructor({ send, cancel, clock = Date.now }) {
+  constructor({ send, cancel, clock = Date.now, onChange = () => {} }) {
     this.send = send; this.cancel = cancel; this.clock = clock
     this.desktopAt = -Infinity; this.desktop = {}; this.call = null; this.revision = 0
+    this.onChange = onChange
   }
   get sessionId() { return this.call?.sessionId }
   snapshot() {
     const c = this.call
     return c ? { id:c.id, phase:c.phase, turn:c.turn, revision:this.revision, reason:c.reason || '', text:c.text || '' } : null
   }
-  update(phase, reason = '') { this.call.phase = phase; this.call.reason = reason; this.revision += 1 }
+  update(phase, reason = '') { this.call.phase = phase; this.call.reason = reason; this.revision += 1; this.onChange() }
   ready() {
     if (this.clock() - this.desktopAt > 6000 || this.desktop.voiceProtocol !== 1) throw problem('Open the updated Whale Companion on the Harness host.')
     if (!this.desktop.voiceReady) throw problem('Configure Doubao voice and enable Sound in Whale Companion.')
@@ -37,7 +38,7 @@ export class VoiceCalls {
     if (event?.type === 'user/message' && event.data?.source?.kind !== 'user') return false
     // An out-of-band message must not make the whale speak into an open mic.
     if (event?.type === 'user/message' && !this.call.prepared) {
-      this.cancel(id); this.call.turn = null; this.update('cancelled'); return false
+      this.cancel(id); this.call.turn = null; this.call.input = null; this.update('cancelled'); return false
     }
     return this.reads(id)
   }
@@ -70,14 +71,14 @@ export class VoiceCalls {
     c.touched = this.clock()
     if (!this.send({type:'call_ping',id:c.id})) { this.end(); throw problem('Whale Companion is disconnected.') }
     if (body.action === 'call_pause') {
-      this.cancel(c.sessionId); c.turn = null; c.prepared = false; this.update('paused')
+      this.cancel(c.sessionId); c.turn = null; c.prepared = false; c.input = null; this.update('paused')
       this.send({type:'call_pause',id:c.id})
     } else if (body.action === 'call_resume') {
-      this.ready(); c.turn = null; c.prepared = false; c.created = this.clock(); this.update('connecting'); this.send({type:'call_resume',id:c.id})
+      this.ready(); c.turn = null; c.prepared = false; c.input = null; c.created = this.clock(); this.update('connecting'); this.send({type:'call_resume',id:c.id})
     } else if (body.action === 'call_prepare') {
       this.ready()
       if (c.phase !== 'ready' && c.phase !== 'finished') throw problem('Resume the call before speaking again.',409)
-      this.cancel(c.sessionId); c.turn = null; c.text = ''; c.prepared = true; this.update('waiting')
+      this.cancel(c.sessionId); c.turn = null; c.text = ''; c.prepared = true; c.input = body.input === 'asr' ? 'asr' : null; this.update('waiting')
       this.send({type:'call_prepare',id:c.id})
     } else if (body.action !== 'call_poll') throw problem('Unknown call action.',400)
     return this.snapshot()
@@ -88,6 +89,6 @@ export class VoiceCalls {
   }
   end() {
     if (!this.call) return
-    const c = this.call; this.call = null; this.cancel(c.sessionId); this.send({type:'call_close',id:c.id})
+    const c = this.call; this.call = null; this.cancel(c.sessionId); this.send({type:'call_close',id:c.id}); this.onChange()
   }
 }

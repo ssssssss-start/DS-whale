@@ -2,6 +2,8 @@
 
 补丁修改的是 DS Bot 插件，不是 Harness。内容包括：会话右键绑定、成功提示、鲸鱼娘通话适配、语音状态与字幕处理、翻译和回归测试。生成文件 `client.js` 与对应源码一起保存。
 
+语音识别结果现在显式标注为 ASR，供 Agent 的听觉上下文使用。原生桌面双击通话直接使用 Harness 会话，不要求此补丁；本补丁用于 DS Bot 浏览器入口。
+
 目标仓库：https://github.com/FeiZhuLulu/DeepSeek-Bot
 
 精确基线：`6c25d5449582b7ae3aa323050e94400c76229443`。

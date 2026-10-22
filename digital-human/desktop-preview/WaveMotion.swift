@@ -12,7 +12,7 @@ final class WaveMotion {
                 let name = String(format: "%d-%d-%02d", a, b, step)
                 guard let url = Bundle.main.url(forResource: name, withExtension: "png", subdirectory: "wave-tweens"),
                       let image = NSImage(contentsOf: url) else { break }
-                let texture = SKTexture(image: image)
+                let texture = SKTexture(cgImage:cleanHairEdges(image.cgImage(forProposedRect:nil,context:nil,hints:nil)!))
                 texture.filteringMode = .linear
                 textures.append(texture)
             }
@@ -24,7 +24,7 @@ final class WaveMotion {
             let name = String(format:"lift-%03d",step)
             guard let url = Bundle.main.url(forResource:name,withExtension:"png",subdirectory:"lift-v3"),
                   let image = NSImage(contentsOf:url) else { break }
-            let texture = SKTexture(image:image); texture.filteringMode = .linear
+            let texture = SKTexture(cgImage:cleanHairEdges(image.cgImage(forProposedRect:nil,context:nil,hints:nil)!)); texture.filteringMode = .linear
             lift.append(texture)
         }
         if lift.count == 97 { transitions["0-1"] = lift }

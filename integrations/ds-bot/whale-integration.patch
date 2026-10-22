@@ -1,5 +1,5 @@
 diff --git a/ds-bot/client.js b/ds-bot/client.js
-index acc2892..c48568a 100644
+index acc2892..c2ed8b1 100644
 --- a/ds-bot/client.js
 +++ b/ds-bot/client.js
 @@ -32,6 +32,19 @@ module.exports = __toCommonJS(index_exports);
@@ -131,8 +131,8 @@ index acc2892..c48568a 100644
 +      if (!this.closed) this.poll();
 +    }, 250);
 +  }
-+  async control(action) {
-+    const state = await this.request(action);
++  async control(action, extra = {}) {
++    const state = await this.request(action, extra);
 +    this.accept(state);
 +    return state;
 +  }
@@ -189,7 +189,7 @@ index acc2892..c48568a 100644
 -    void actions.send(sessionId, text.trim()).catch(() => setPhase("listening"));
 +    setPlaybackDone(false);
 +    try {
-+      if (call2.current) await call2.current.control("call_prepare");
++      if (call2.current) await call2.current.control("call_prepare", { input: "asr" });
 +      if (own !== turn.current) return;
 +      awaitingAudio.current = !!call2.current;
 +      waiting.current = reply.current.split("|")[0];
@@ -535,7 +535,7 @@ index 6f8543f..a5f2a47 100644
      openSettings: (page = 'general', id = null) => { ui.set(state => ({ ...state, settings: { page, id }, menu: null, palette: null, newChat: null })) },
      closeSettings: () => { ui.set(state => (state.settings ? { ...state, settings: null } : state)) },
 diff --git a/ds-bot/src/client/voice.js b/ds-bot/src/client/voice.js
-index d68e6b6..2463968 100644
+index d68e6b6..7a0978d 100644
 --- a/ds-bot/src/client/voice.js
 +++ b/ds-bot/src/client/voice.js
 @@ -7,11 +7,13 @@ import { Shimmer } from './cells.js'
@@ -592,7 +592,7 @@ index d68e6b6..2463968 100644
 -    void actions.send(sessionId, text.trim()).catch(() => setPhase('listening'))
 +    setPlaybackDone(false)
 +    try {
-+      if (call.current) await call.current.control('call_prepare')
++      if (call.current) await call.current.control('call_prepare', { input:'asr' })
 +      if (own !== turn.current) return
 +      awaitingAudio.current = !!call.current
 +      waiting.current = reply.current.split('|')[0]
@@ -768,7 +768,7 @@ index 0000000..0076000
 +}
 diff --git a/ds-bot/src/client/whale-call.js b/ds-bot/src/client/whale-call.js
 new file mode 100644
-index 0000000..a184d2c
+index 0000000..1d57b14
 --- /dev/null
 +++ b/ds-bot/src/client/whale-call.js
 @@ -0,0 +1,47 @@
@@ -812,7 +812,7 @@ index 0000000..a184d2c
 +      if (!this.closed) this.poll()
 +    }, 250)
 +  }
-+  async control(action) { const state = await this.request(action); this.accept(state); return state }
++  async control(action, extra = {}) { const state = await this.request(action, extra); this.accept(state); return state }
 +  close() {
 +    if (this.closed) return
 +    this.closed = true; clearTimeout(this.timer)
@@ -852,7 +852,7 @@ index 0000000..0b3a596
 +})
 diff --git a/ds-bot/test/whale-call.test.js b/ds-bot/test/whale-call.test.js
 new file mode 100644
-index 0000000..23be450
+index 0000000..71f82cb
 --- /dev/null
 +++ b/ds-bot/test/whale-call.test.js
 @@ -0,0 +1,50 @@
@@ -871,14 +871,14 @@ index 0000000..23be450
 +  const call=new WhaleCall(state=>states.push(state),()=>assert.fail('unexpected disconnect'))
 +  t.after(()=>call.close())
 +  assert.equal(await call.open('chosen'),true)
-+  await call.control('call_prepare')
++  await call.control('call_prepare',{input:'asr'})
 +  call.accept({id:'mock-call',revision:2,phase:'finished'})
 +  call.accept({id:'old-call',revision:10,phase:'finished'})
 +  assert.deepEqual(states.map(s=>s.phase),['ready','waiting'])
 +  call.accept({id:'mock-call',revision:4,phase:'speaking'})
 +  call.close();call.accept({id:'mock-call',revision:5,phase:'finished'})
 +  assert.deepEqual(states.map(s=>s.phase),['ready','waiting','speaking'])
-+  assert.deepEqual(actions,[{action:'call_start',sessionId:'chosen'},{action:'call_prepare',id:'mock-call'},{action:'call_end',id:'mock-call'}])
++  assert.deepEqual(actions,[{action:'call_start',sessionId:'chosen'},{action:'call_prepare',id:'mock-call',input:'asr'},{action:'call_end',id:'mock-call'}])
 +})
 +
 +test('only an absent plugin permits browser voice; native/config failure never falls back',async t=>{

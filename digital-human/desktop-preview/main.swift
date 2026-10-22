@@ -3,6 +3,10 @@ import SpriteKit
 
 final class CharacterView: SKView {
     var onScale: ((CGFloat) -> Void)?
+    var onCall: (() -> Void)?
+    var onSingleClick: (() -> Void)?
+    private let clicks = CharacterClicks()
+    private var doubleClick = false
     var characterScene: CharacterScene { scene as! CharacterScene }
     private var downPoint: CGPoint?
     private var downOrigin = CGPoint.zero
@@ -19,6 +23,8 @@ final class CharacterView: SKView {
         downOrigin = window?.frame.origin ?? .zero
         dragging = false
         patted = false
+        doubleClick = event.clickCount == 2
+        if doubleClick { clicks.cancel(); return }
         let point = characterScene.convertPoint(fromView: convert(event.locationInWindow, from: nil))
         if characterScene.isHead(point) {
             longPress = Timer.scheduledTimer(withTimeInterval: 0.7, repeats: false) { [weak self] _ in
@@ -33,14 +39,17 @@ final class CharacterView: SKView {
         guard let start = downPoint else { return }
         let current = NSEvent.mouseLocation
         let dx = current.x - start.x, dy = current.y - start.y
-        if hypot(dx, dy) > 5 { dragging = true; longPress?.invalidate(); characterScene.headpatHeld = false }
+        if hypot(dx, dy) > 5 { dragging = true; clicks.cancel(); longPress?.invalidate(); characterScene.headpatHeld = false }
         if dragging { window?.setFrameOrigin(CGPoint(x: downOrigin.x + dx, y: downOrigin.y + dy)) }
     }
     override func mouseUp(with event: NSEvent) {
         characterScene.headpatHeld = false
         longPress?.invalidate()
         longPress = nil
-        if downPoint != nil && !dragging && !patted { characterScene.request(.poke) }
+        if downPoint != nil && !dragging && !patted {
+            if doubleClick { clicks.cancel(); onCall?() }
+            else { clicks.single(after:NSEvent.doubleClickInterval) { [weak self] in self?.onSingleClick?() } }
+        }
         downPoint = nil
     }
     override func scrollWheel(with event: NSEvent) {
@@ -57,6 +66,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     var characterScene: CharacterScene!
     let actions = NSMenu()
     let voice = VoicePipeline()
+    let nativeCall = NativeCallController()
+    let callBadge = CallStatusView(frame:NSRect(x:0,y:0,width:172,height:32))
+    var callStatusWindow: NSPanel?
     let voiceChoices = NSMenu()
     var voiceStatusItem: NSMenuItem!
     var proactiveItem: NSMenuItem!
@@ -108,13 +120,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         view.allowsTransparency = true
         view.preferredFramesPerSecond = 60
         view.ignoresSiblingOrder = false
-        view.toolTip = "Click: poke · Hold head: head pat · Drag: move · Scroll: resize"
+        view.toolTip = "Double-click: voice call · Click: poke · Hold head: head pat · Drag: move · Scroll: resize"
         view.setAccessibilityLabel("Whale character")
         characterScene = CharacterScene(size: frame.size, frames: artwork.textures)
         view.presentScene(characterScene)
         view.onScale = { [weak self] delta in guard let self else { return }; self.resize(to: self.scale + delta) }
+        view.onCall = { [weak self] in self?.toggleNativeCall() }
+        view.onSingleClick = { [weak self] in guard let self, !self.nativeCall.isOpen else { return }; self.characterScene.request(.poke) }
         characterScene.onInteraction = { [weak self] in self?.voice.cancel() }
-        voice.onLevel = { [weak self] level in self?.characterScene.speakingLevel = level }
+        voice.onLevel = { [weak self] level in self?.characterScene.speakingLevel = level; self?.callBadge.level = level }
+        voice.body.available = { [weak self] in
+            guard let self else { return false }
+            return self.settings.visible && self.settings.active && !self.characterScene.isPaused
+        }
+        voice.body.perform = { [weak self] behavior in self?.characterScene.performBodyAction(behavior) ?? "unavailable" }
         voice.onStart = { [weak self] in self?.characterScene.beginSpeaking() }
         voice.onStatus = { [weak self] status in self?.voiceStatusItem?.title = status }
         voice.onTestFailure = { message in
@@ -129,6 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         buildMenu()
         reloadVoiceConfig(showResult:false)
         setupProactive()
+        setupNativeCall(in:view)
         voice.start()
         view.menu = actions
         window.contentView = view
@@ -183,6 +203,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         actions.addItem(withTitle: "Stop Speaking", action: #selector(stopSpeaking), keyEquivalent: "")
         voiceStatusItem = actions.addItem(withTitle: voice.status, action: nil, keyEquivalent: "")
         actions.addItem(.separator())
+        actions.addItem(withTitle:"Start / End Voice Call",action:#selector(toggleNativeCall),keyEquivalent:"")
+        actions.addItem(withTitle:"Pause Voice Call",action:#selector(pauseNativeCall),keyEquivalent:"")
+        actions.addItem(withTitle:"Resume Voice Call",action:#selector(resumeNativeCall),keyEquivalent:"")
         actions.addItem(withTitle: "Say Hello", action: #selector(sayHello), keyEquivalent: "")
         actions.addItem(withTitle: "Poke", action: #selector(poke), keyEquivalent: "")
         actions.addItem(withTitle: "Head Pat", action: #selector(headPat), keyEquivalent: "")
@@ -222,9 +245,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let x = min(max(old.midX - size.width / 2, screen.minX), screen.maxX - size.width)
         let y = min(max(old.minY, screen.minY), screen.maxY - size.height)
         window.setFrame(NSRect(x: x, y: y, width: size.width, height: size.height), display: true)
+        positionCallStatus()
         UserDefaults.standard.set(Double(scale), forKey: "characterScale")
     }
     func windowDidMove(_ notification: Notification) {
+        guard (notification.object as? NSWindow) === window else { return }
+        positionCallStatus()
         UserDefaults.standard.set(window.frame.minX, forKey: "windowX")
         UserDefaults.standard.set(window.frame.minY, forKey: "windowY")
     }
@@ -250,7 +276,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         }
     }
     @objc func testVoice() { voice.testVoice() }
-    @objc func disconnectVoice() { voice.disconnect() }
+    @objc func disconnectVoice() { nativeCall.end(); voice.endVoiceCall(); voice.disconnect() }
     @objc func selectDoubaoVoice(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? String else { return }
         voice.selectVoice(id); UserDefaults.standard.set(id,forKey:"doubaoVoiceID")
@@ -263,27 +289,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         guard let raw = sender.representedObject as? String, let behavior = Behavior(rawValue:raw), behavior.isEmotion else { return }
         settings.interact(); characterScene.request(behavior)
     }
-    @objc func toggleSound() { characterScene.feedback.muted.toggle(); voice.muted = characterScene.feedback.muted; settings.muted = characterScene.feedback.muted }
+    @objc func toggleSound() {
+        characterScene.feedback.muted.toggle()
+        if characterScene.feedback.muted { nativeCall.end(); voice.endVoiceCall() }
+        voice.muted = characterScene.feedback.muted; settings.muted = characterScene.feedback.muted
+    }
     @objc func toggleMotion() {
         characterScene.idleMotion.toggle()
         UserDefaults.standard.set(!characterScene.idleMotion, forKey: "idleMotionDisabled")
     }
     @objc func selectSize(_ sender: NSMenuItem) { resize(to: CGFloat(sender.tag) / 100) }
     @objc func showWhale() { settings.visible = true; settings.interact(); characterScene.resume(); window.orderFrontRegardless() }
-    @objc func hideWhale() { settings.visible = false; voice.stopAll(); characterScene.suspend(); window.orderOut(nil) }
-    @objc func quit() { voice.stopAll(); characterScene.feedback.stop(); NSApp.terminate(nil) }
+    @objc func hideWhale() { nativeCall.end(); settings.visible = false; voice.stopAll(); characterScene.suspend(); window.orderOut(nil) }
+    @objc func quit() { nativeCall.end(); voice.stopAll(); characterScene.feedback.stop(); NSApp.terminate(nil) }
 }
 
 if CommandLine.arguments.contains("--self-test") {
     runInteractionChecks()
+    runBodyControlChecks()
+    runSpeechSegmentChecks()
+    runNativeCallChecks()
     runEmotionChecks()
     runWaveChecks()
     runTailChecks()
+    runHairEdgeChecks()
     runProactiveSettingsChecks()
     runVoicePolicyChecks()
     runVoiceStreamChecks()
     runVoiceConfigChecks()
     runDoubaoChecks()
+} else if let index = CommandLine.arguments.firstIndex(of:"--export-call-status"), CommandLine.arguments.count > index+1 {
+    do { try exportCallStatusPreview(to:URL(fileURLWithPath:CommandLine.arguments[index+1])) }
+    catch { print("Call status preview export failed"); exit(1) }
 } else if CommandLine.arguments.contains("--ipc-self-test") {
     runVoiceSocketChecks()
 } else if CommandLine.arguments.contains("--pcm-audio-check") {

@@ -2,6 +2,8 @@
 
 This patch changes DS Bot, not Harness. It adds right-click binding, success feedback, the Whale call adapter, voice-state/caption handling, translations and regression tests. `client.js` is generated from `src/client` and included alongside source changes.
 
+Recognized voice-call input now carries explicit ASR provenance for Agent hearing context. Native double-click calls use Harness sessions directly and do not require this patch; the patch serves DS Bot browser controls.
+
 Target repository: https://github.com/FeiZhuLulu/DeepSeek-Bot
 
 Exact baseline: `6c25d5449582b7ae3aa323050e94400c76229443`.

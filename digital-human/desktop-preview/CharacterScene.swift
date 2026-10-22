@@ -15,12 +15,14 @@ final class CharacterScene: SKScene {
     private var nextBlink: TimeInterval = 0
     private var blinkStarted: TimeInterval?
     private var playedSerial = 0
+    private var silentSerial = -1
     private var waveRecovery: WaveRecovery?
     private var headpatStartClosure = 0.0
     private(set) var eyeClosure = 0.0
     var idleMotion = !UserDefaults.standard.bool(forKey: "idleMotionDisabled")
     var onInteraction: (() -> Void)?
     var speakingLevel = 0.0
+    var callPhase = "idle"
     var headpatHeld = false
     var lastTime: TimeInterval = 0
     var previewTime: TimeInterval?
@@ -95,6 +97,21 @@ final class CharacterScene: SKScene {
         feedback.stop()
         playNewInteraction(at:now)
     }
+    func performBodyAction(_ behavior: Behavior) -> String {
+        guard !isPaused else { return "unavailable" }
+        let now = previewTime ?? ProcessInfo.processInfo.systemUptime
+        interaction.advance(to:now)
+        guard interaction.behavior == .idle || interaction.serial == silentSerial else { return "busy" }
+        if behavior == .idle {
+            headpatHeld = false; feedback.stop(); interaction.interrupt(at:now)
+            return "accepted"
+        }
+        guard interaction.behavior == .idle, interaction.begin(behavior,at:now) else { return "busy" }
+        // Agent gestures must not play bundled clips or cancel the live spoken reply.
+        silentSerial = interaction.serial
+        playNewInteraction(at:now)
+        return "accepted"
+    }
     private func playNewInteraction(at time: TimeInterval) {
         guard interaction.serial != playedSerial else { return }
         playedSerial = interaction.serial
@@ -102,7 +119,7 @@ final class CharacterScene: SKScene {
         headpatStartClosure = eyeClosure
         blinkStarted = nil
         nextBlink = time + 12.0
-        if previewTime == nil { feedback.play(interaction.behavior) }
+        if previewTime == nil && interaction.serial != silentSerial { feedback.play(interaction.behavior) }
     }
     func beginSpeaking() {
         feedback.stop()
@@ -154,7 +171,9 @@ final class CharacterScene: SKScene {
         } else { eyeOverlay.alpha = 0 }
         let greeting = behavior == .greeting
         let duration = interaction.duration
-        rig.zRotation = CGFloat(sin(time * 3.4) * speakingLevel * 0.008)
+        let attention = callPhase == "listening" ? sin(time * 1.8) * 0.007
+            : ["thinking","waiting","generating"].contains(callPhase) ? sin(time * 1.2) * 0.018 : 0
+        rig.zRotation = CGFloat(sin(time * 3.4) * speakingLevel * 0.008 + attention)
         tailRig.update(time:time,enabled:idleMotion,headpat:behavior == .headpat ? envelope : 0,greetingElapsed:greeting ? elapsed : nil)
         if greeting {
             // Each pose is the complete supplied drawing, including shoulder, hand and expression.

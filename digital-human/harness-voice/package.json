@@ -1,6 +1,6 @@
 {
   "name": "dsh-whale-voice",
-  "version": "0.4.3",
+  "version": "0.5.0",
   "type": "module",
   "description": "Opt-in sentence voice bridge for the Whale desktop companion",
   "main": "index.js",
@@ -18,7 +18,9 @@
     "host.js",
     "transport.js",
     "binding.js",
-    "calls.js"
+    "calls.js",
+    "embodiment.js",
+    "native-call.js"
   ],
   "scripts": {
     "test": "node --test test/*.test.mjs"

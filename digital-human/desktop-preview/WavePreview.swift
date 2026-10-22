@@ -55,6 +55,7 @@ func exportExpressionPreviews(to folder: URL, emotionsOnly: Bool = false) throws
         ? Behavior.emotions.map { ($0.rawValue,$0,nil,$0.minimumDuration + 0.6) } + [("shy-reply",.shy,1.2,4.7)] : [
         ("headpat",.headpat,nil,5.4),
         ("headpat-light",.headpat,nil,5.4),
+        ("headpat-dark",.headpat,nil,5.4),
         ("headpat-reply",.headpat,0.7,5.4),
         ("wave-reply",.greeting,4.5,7.4),
         ("idle-smile",.idle,nil,12.0),
@@ -66,6 +67,7 @@ func exportExpressionPreviews(to folder: URL, emotionsOnly: Bool = false) throws
         view.allowsTransparency = true; view.isPaused = true
         let scene = CharacterScene(size:size,frames:artwork.textures)
         if sample.name == "headpat-light" { scene.backgroundColor = .white }
+        if sample.name == "headpat-dark" { scene.backgroundColor = NSColor(calibratedRed:0.04,green:0.05,blue:0.08,alpha:1) }
         scene.previewTime = 0; scene.idleMotion = false
         view.presentScene(scene)
         if emotionsOnly {
