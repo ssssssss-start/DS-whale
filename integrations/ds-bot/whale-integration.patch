@@ -1,0 +1,1005 @@
+diff --git a/ds-bot/client.js b/ds-bot/client.js
+index acc2892..c48568a 100644
+--- a/ds-bot/client.js
++++ b/ds-bot/client.js
+@@ -32,6 +32,19 @@ module.exports = __toCommonJS(index_exports);
+ // src/client/i18n.js
+ var NAMESPACE = "ds-bot";
+ var ZH = {
++  "Voice: Whale Companion": "语音：鲸鱼娘",
++  "Voice: Browser": "语音：浏览器",
++  "Voice unavailable": "语音不可用",
++  "Connecting Whale voice…": "正在连接鲸鱼娘语音…",
++  "Whale voice is unavailable. Open the companion and check Doubao voice and Sound.": "鲸鱼娘语音不可用。请打开桌宠，检查豆包语音配置并开启 Sound，然后重新通话。",
++  "Whale playback stopped. Resume listening when you are ready.": "鲸鱼娘播放已停止。准备好后可恢复聆听。",
++  "Open the updated Whale Companion on the Harness host.": "请在运行 Harness 的电脑上打开新版鲸鱼娘桌宠。",
++  "Configure Doubao voice and enable Sound in Whale Companion.": "请在鲸鱼娘中配置豆包语音并开启 Sound。",
++  "Another Whale voice call is already open.": "已有一通鲸鱼娘语音通话，请先结束它。",
++  "Whale Companion is disconnected.": "鲸鱼娘桌宠已断开。",
++  "This Whale voice call has ended. Close the call and try again.": "鲸鱼娘通话已结束，请关闭后重新拨打。",
++  "Resume the call before speaking again.": "请先恢复通话，再继续说话。",
++  "Whale voice failed. Check Doubao voice access and balance in the companion.": "鲸鱼娘合成语音失败，请检查豆包语音权限、余额及桌宠状态。",
+   // Shared
+   "Main Bot": "主 Bot",
+   Working: "工作中",
+@@ -347,6 +360,11 @@ var ZH = {
+   "Group settings": "群设置",
+   "Rename group": "重命名群聊",
+   "Copy conversation ID": "复制对话 ID",
++  "Bind Whale Companion": "绑定鲸鱼娘",
++  "Whale Companion bound to {name}": "鲸鱼娘已绑定到「{name}」",
++  "Enable the dsh-whale-voice plugin to bind Whale Companion.": "请启用 dsh-whale-voice 插件，再绑定鲸鱼娘。",
++  "Whale binding is unavailable. Enable dsh-whale-voice and try again.": "暂时无法绑定鲸鱼娘，请确认 dsh-whale-voice 插件已启用后重试。",
++  "This conversation is no longer available. Refresh the sidebar and try again.": "这个会话已不可用，请刷新侧边栏后重试。",
+   "Hide from sidebar": "从侧栏隐藏",
+   "{name} actions": "{name} 的操作",
+   // The DSH Agent's own row and Session list. "DSH Agent" is a product name and
+@@ -1004,6 +1022,29 @@ var call = async (endpoint, payload, signal) => {
+   return result.value;
+ };
+ 
++// src/client/whale.js
++async function bindWhale(sessionId, title) {
++  let response;
++  try {
++    response = await fetch("api/whale-voice", {
++      method: "POST",
++      credentials: "same-origin",
++      headers: { "content-type": "application/json" },
++      body: JSON.stringify({ action: "bind", sessionId, title })
++    });
++  } catch {
++    throw new Error(t("Could not reach DSH. Check that it is still running."));
++  }
++  if (response.status === 404) {
++    const result2 = await response.json().catch(() => null);
++    if (result2?.error) throw new Error(t("This conversation is no longer available. Refresh the sidebar and try again."));
++    throw new Error(t("Enable the dsh-whale-voice plugin to bind Whale Companion."));
++  }
++  const result = await response.json().catch(() => null);
++  if (!response.ok || !result?.ok) throw new Error(t("Whale binding is unavailable. Enable dsh-whale-voice and try again."));
++  return result.value;
++}
++
+ // src/client/inks.js
+ var INKS = {
+   deepseek: ["#4D6BFE", "#6A84FF"],
+@@ -7812,6 +7853,83 @@ function ExchangeDialog({ pair, roster, actions }) {
+   );
+ }
+ 
++// src/client/whale-call.js
++var WhaleCall = class {
++  constructor(onState, onError) {
++    this.onState = onState;
++    this.onError = onError;
++    this.id = null;
++    this.closed = false;
++    this.revision = -1;
++    this.timer = null;
++  }
++  async request(action, extra = {}) {
++    const controller = new AbortController();
++    const timeout = setTimeout(() => controller.abort(), 5e3);
++    try {
++      const response = await fetch("api/whale-voice", {
++        method: "POST",
++        credentials: "same-origin",
++        headers: { "content-type": "application/json" },
++        body: JSON.stringify({ action, ...this.id ? { id: this.id } : {}, ...extra }),
++        signal: controller.signal,
++        keepalive: action === "call_end"
++      });
++      const result = await response.json().catch(() => null);
++      if (action === "call_start" && response.status === 404 && !result?.error) return null;
++      if (!response.ok || !result?.ok) throw new Error(t(result?.error || "Whale voice is unavailable. Open the companion and check Doubao voice and Sound."));
++      return result.value;
++    } finally {
++      clearTimeout(timeout);
++    }
++  }
++  accept(state) {
++    if (this.closed || !state || state.id !== this.id || state.revision < this.revision) return;
++    this.revision = state.revision;
++    this.onState(state);
++  }
++  async open(sessionId) {
++    const state = await this.request("call_start", { sessionId });
++    if (!state) return false;
++    this.id = state.id;
++    if (this.closed) {
++      await this.request("call_end").catch(() => {
++      });
++      return true;
++    }
++    this.accept(state);
++    this.poll();
++    return true;
++  }
++  poll() {
++    this.timer = setTimeout(async () => {
++      try {
++        this.accept(await this.request("call_poll"));
++      } catch {
++        if (!this.closed) {
++          this.onError();
++          this.close();
++        }
++        ;
++        return;
++      }
++      if (!this.closed) this.poll();
++    }, 250);
++  }
++  async control(action) {
++    const state = await this.request(action);
++    this.accept(state);
++    return state;
++  }
++  close() {
++    if (this.closed) return;
++    this.closed = true;
++    clearTimeout(this.timer);
++    if (this.id) void this.request("call_end").catch(() => {
++    });
++  }
++};
++
+ // src/client/voice.js
+ var import_react20 = require("react");
+ var plainSpeech = (text) => stripHeader(text).replace(/```[\s\S]*?```/g, " ").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/[*_`#>|~-]+/g, " ").replace(/\s+/g, " ").trim();
+@@ -7877,12 +7995,21 @@ function VoiceMode({ sessionId, roster, actions, useSessions, useSessionStatus }
+     return entry ? `${outline.length}|${entry.response ?? ""}` : "0|";
+   });
+   const [speech] = (0, import_react20.useState)(() => actions.speech());
++  const inputReady = (0, import_react20.useRef)(!speech && !!speechApi());
+   const [phase, setPhase] = (0, import_react20.useState)(speech ? "starting" : speechApi() ? "listening" : "unsupported");
+   const [catalog, setCatalog] = (0, import_react20.useState)(null);
+   const [heard, setHeard] = (0, import_react20.useState)("");
+   const [said, setSaid] = (0, import_react20.useState)("");
+   const [note, setNote] = (0, import_react20.useState)("");
+   const [serviceLevel, setServiceLevel] = (0, import_react20.useState)(0);
++  const [output, setOutput] = (0, import_react20.useState)("starting");
++  const [voiceError, setVoiceError] = (0, import_react20.useState)("");
++  const [playbackDone, setPlaybackDone] = (0, import_react20.useState)(false);
++  const call2 = (0, import_react20.useRef)(null);
++  const awaitingAudio = (0, import_react20.useRef)(false);
++  const resuming = (0, import_react20.useRef)(false);
++  const phaseRef = (0, import_react20.useRef)(phase);
++  phaseRef.current = phase;
+   const [cycle, setCycle] = (0, import_react20.useState)(0);
+   const waiting = (0, import_react20.useRef)(null);
+   const reply = (0, import_react20.useRef)(lastReply);
+@@ -7891,22 +8018,102 @@ function VoiceMode({ sessionId, roster, actions, useSessions, useSessionStatus }
+   const paneLeft = usePaneLeft();
+   const close = () => {
+     turn.current += 1;
++    call2.current?.close();
+     window.speechSynthesis?.cancel();
+     actions.closeVoice();
+   };
+   useEscape(close);
+-  const submit = (text) => {
++  const submit = async (text) => {
++    const own = turn.current;
+     setHeard(text);
++    setSaid("");
+     setPhase("thinking");
+-    waiting.current = reply.current.split("|")[0];
+-    void actions.send(sessionId, text.trim()).catch(() => setPhase("listening"));
++    setPlaybackDone(false);
++    try {
++      if (call2.current) await call2.current.control("call_prepare");
++      if (own !== turn.current) return;
++      awaitingAudio.current = !!call2.current;
++      waiting.current = reply.current.split("|")[0];
++      await actions.send(sessionId, text.trim());
++    } catch {
++      if (own !== turn.current) return;
++      awaitingAudio.current = false;
++      if (call2.current) {
++        void call2.current.control("call_pause").catch(() => {
++        });
++        setVoiceError(t("Whale voice is unavailable. Open the companion and check Doubao voice and Sound."));
++        setPhase("paused");
++      } else setPhase("listening");
++    }
+   };
+   const dictation = useDictation((text, final) => {
++    if (phaseRef.current !== "listening") return;
+     setHeard(text);
+     if (!final) return;
+     dictation.stop();
+     submit(text);
+   });
++  (0, import_react20.useEffect)(() => {
++    let live = true;
++    const failed = () => {
++      if (!live) return;
++      awaitingAudio.current = false;
++      turn.current += 1;
++      setVoiceError(t("Whale voice is unavailable. Open the companion and check Doubao voice and Sound."));
++      setOutput("error");
++      setPhase("paused");
++    };
++    const connection = new WhaleCall((state) => {
++      if (!live) return;
++      if (awaitingAudio.current && typeof state.text === "string") setSaid(plainSpeech(state.text));
++      if (state.phase === "ready") {
++        window.speechSynthesis?.cancel();
++        setOutput("whale");
++        if (resuming.current) {
++          resuming.current = false;
++          setVoiceError("");
++          setPlaybackDone(false);
++          setPhase(inputReady.current ? "listening" : speech ? "setup" : "unsupported");
++        }
++      }
++      if (state.phase === "speaking" && awaitingAudio.current) setPhase("speaking");
++      if (state.phase === "finished" && awaitingAudio.current) setPlaybackDone(true);
++      if (state.phase === "failed" || state.phase === "cancelled") {
++        awaitingAudio.current = false;
++        resuming.current = false;
++        turn.current += 1;
++        setOutput("whale");
++        setVoiceError(t(state.reason || "Whale playback stopped. Resume listening when you are ready."));
++        setPhase("paused");
++      }
++    }, failed);
++    call2.current = connection;
++    connection.open(sessionId).then((enabled) => {
++      if (!live) return;
++      if (!enabled) {
++        call2.current = null;
++        setOutput("browser");
++      }
++    }, failed);
++    return () => {
++      live = false;
++      turn.current += 1;
++      connection.close();
++      if (call2.current === connection) call2.current = null;
++    };
++  }, [sessionId]);
++  (0, import_react20.useEffect)(() => {
++    if (output === "browser" && !speech && phase === "starting") setPhase(speechApi() ? "listening" : "unsupported");
++    if (output === "whale" && !speech && phase === "starting") setPhase(speechApi() ? "listening" : "unsupported");
++  }, [output, speech, phase]);
++  (0, import_react20.useEffect)(() => {
++    if (!playbackDone || !awaitingAudio.current) return;
++    awaitingAudio.current = false;
++    waiting.current = null;
++    setHeard("");
++    setPlaybackDone(false);
++    setPhase("listening");
++  }, [playbackDone]);
+   (0, import_react20.useEffect)(() => {
+     if (!note) return void 0;
+     const timer = setTimeout(() => setNote(""), 2600);
+@@ -7918,21 +8125,22 @@ function VoiceMode({ sessionId, roster, actions, useSessions, useSessionStatus }
+     speechCatalog(speech).then(({ catalog: next, usable }) => {
+       if (!live) return;
+       setCatalog(next);
+-      setPhase(usable ? "listening" : "setup");
++      inputReady.current = usable;
++      setPhase((current) => current === "starting" ? usable ? "listening" : "setup" : current);
+     }, () => {
+-      if (live) setPhase("setup");
++      if (live) setPhase((current) => current === "starting" ? "setup" : current);
+     });
+     return () => {
+       live = false;
+     };
+   }, [speech]);
+-  const listen = phase === "listening";
++  const listen = phase === "listening" && inputReady.current && (output === "whale" || output === "browser");
+   (0, import_react20.useEffect)(() => {
+     if (speech || !listen || dictation.listening) return void 0;
+     const timer = setTimeout(() => dictation.start({ continuous: false, onEnd: () => {
+-    } }), 250);
++    } }), output === "whale" ? 50 : 250);
+     return () => clearTimeout(timer);
+-  }, [listen, dictation.listening]);
++  }, [listen, dictation.listening, output]);
+   (0, import_react20.useEffect)(() => {
+     if (phase !== "listening") dictation.stop();
+   }, [phase]);
+@@ -7999,13 +8207,14 @@ function VoiceMode({ sessionId, roster, actions, useSessions, useSessionStatus }
+     };
+   }, [speech, catalog, listen, cycle]);
+   (0, import_react20.useEffect)(() => {
+-    if (phase !== "thinking" || running || waiting.current === null) return;
++    if (output !== "browser" || phase !== "thinking" || running || waiting.current === null) return;
+     const [count, text] = [lastReply.slice(0, lastReply.indexOf("|")), lastReply.slice(lastReply.indexOf("|") + 1)];
+     if (count === waiting.current || !text.trim()) return;
+     waiting.current = null;
+     const spoken = plainSpeech(text);
+     setSaid(spoken);
+     setHeard("");
++    if (output !== "browser") return;
+     if (!window.speechSynthesis || !spoken) {
+       setPhase("listening");
+       return;
+@@ -8017,24 +8226,41 @@ function VoiceMode({ sessionId, roster, actions, useSessions, useSessionStatus }
+     setPhase("speaking");
+     window.speechSynthesis.cancel();
+     window.speechSynthesis.speak(utterance);
+-  }, [phase, running, lastReply]);
++  }, [phase, running, lastReply, output]);
+   (0, import_react20.useEffect)(() => () => window.speechSynthesis?.cancel(), []);
+   const micLevel = useMicLevel(!speech && phase === "listening" && dictation.listening);
+   const level = speech ? serviceLevel : micLevel;
+   const markState = phase === "thinking" || phase === "transcribing" ? "thinking" : phase === "speaking" ? "sending" : "idle";
+-  const blocked = phase === "unsupported" || phase === "setup" || phase === "starting";
+-  const togglePause = () => {
++  const blocked = phase === "unsupported" || phase === "setup" || phase === "starting" || output === "starting" || output === "error";
++  const togglePause = async () => {
+     if (phase === "paused") {
+-      setPhase("listening");
++      if (resuming.current) return;
++      try {
++        if (call2.current) {
++          resuming.current = true;
++          await call2.current.control("call_resume");
++        } else {
++          setVoiceError("");
++          setPlaybackDone(false);
++          setPhase("listening");
++        }
++      } catch {
++        resuming.current = false;
++        setVoiceError(t("Whale voice is unavailable. Open the companion and check Doubao voice and Sound."));
++      }
+       return;
+     }
+     turn.current += 1;
++    awaitingAudio.current = false;
++    setPlaybackDone(false);
+     window.speechSynthesis?.cancel();
+     setPhase("paused");
++    if (call2.current) void call2.current.control("call_pause").catch(() => {
++    });
+   };
+   const openSetup = phase === "setup" ? actions.voiceSetup() : null;
+-  const caption = phase === "speaking" ? said : heard;
+-  const shownNote = note || dictation.note;
++  const caption = output === "whale" && said ? said : phase === "speaking" ? said : heard;
++  const shownNote = voiceError || note || dictation.note;
+   return (0, import_react20.createElement)(
+     "div",
+     { className: "bt-pane bt-voice-pane", style: { left: paneLeft } },
+@@ -8049,6 +8275,7 @@ function VoiceMode({ sessionId, roster, actions, useSessions, useSessionStatus }
+         bot ? (0, import_react20.createElement)(BotMark, { bot, size: 112, state: markState, live: true, gaze: phase === "listening" }) : room2 ? (0, import_react20.createElement)(RoomAvatar, { room: room2, roster, size: 112 }) : null
+       ),
+       (0, import_react20.createElement)("div", { className: "bt-voice-name" }, name),
++      (0, import_react20.createElement)("div", { className: "bt-voice-note" }, t(output === "whale" ? "Voice: Whale Companion" : output === "browser" ? "Voice: Browser" : output === "error" ? "Voice unavailable" : "Connecting Whale voice…")),
+       (0, import_react20.createElement)(
+         "div",
+         { className: "bt-voice-status", role: "status" },
+@@ -9497,9 +9724,9 @@ function ErrorToast({ useUi, actions }) {
+   if (!toast) return null;
+   return (0, import_react24.createElement)(
+     "div",
+-    { className: "bt-toast", role: "alert", "data-leaving": leaving || void 0 },
++    { className: "bt-toast", role: toast.kind === "success" ? "status" : "alert", "data-kind": toast.kind, "data-leaving": leaving || void 0 },
+     (0, import_react24.createElement)("span", { className: "bt-toast-text" }, toast.text),
+-    (0, import_react24.createElement)("button", { type: "button", className: "bt-toast-link", onClick: () => {
++    toast.kind === "success" ? null : (0, import_react24.createElement)("button", { type: "button", className: "bt-toast-link", onClick: () => {
+       actions.dismissToast(toast.token);
+       actions.openSettings("feedback");
+     } }, t("Details")),
+@@ -9526,6 +9753,7 @@ var FEEDBACK_CSS = `
+ .bt-toast[data-leaving]{opacity:0;transform:translate(-50%,6px) scale(.98);filter:blur(3px);transition:opacity .18s ease-in,transform .18s ease-in,filter .18s ease-in}
+ .bt-toast-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
+ .bt-toast-text::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:#e02135;margin:0 8px 1px 0}
++.bt-toast[data-kind="success"] .bt-toast-text::before{background:#21854a}
+ .bt-toast-link{flex:none;border:0;background:none;color:var(--bt-ink-2);font:inherit;font-size:12px;cursor:pointer;padding:4px 6px;border-radius:6px}
+ .bt-toast-link:hover{background:var(--bt-hover);color:var(--bt-ink)}
+ .bt-toast-close{flex:none}
+@@ -10006,7 +10234,10 @@ function ContextMenu({ menu, roster, actions, leaving = false }) {
+       bot && !isMainBot ? [t("Make Main Bot"), StarLineIcon, () => actions.setMain(bot.id, true)] : null,
+       bot && isMainBot && mainCount > 1 ? [t("Remove Main Bot role"), StarLineIcon, () => actions.setMain(bot.id, false)] : null
+     ],
+-    [[t("Copy conversation ID"), CopyIcon, () => navigator.clipboard?.writeText(bot ? currentPart(bot) : menu.id)]],
++    [
++      bot ? [t("Bind Whale Companion"), ConnectorIcon, () => actions.bindWhale(currentPart(bot), bot.name)] : null,
++      [t("Copy conversation ID"), CopyIcon, () => navigator.clipboard?.writeText(bot ? currentPart(bot) : menu.id)]
++    ],
+     [
+       isMainBot ? null : [t("Hide from sidebar"), HideIcon, () => actions.setFlags(menu.id, { hidden: true })],
+       isMainBot ? null : [room2 ? t("Delete group") : t("Delete"), TrashIcon, () => bot ? actions.deleteBot(bot.id) : actions.deleteRoom(menu.id), true]
+@@ -12419,6 +12650,10 @@ function apply(ctx) {
+     renameBot: (id) => {
+       ui.set((state) => ({ ...state, details: id, view: "details", renaming: true, tab: null }));
+     },
++    bindWhale: async (sessionId, title) => {
++      const result = await bindWhale(sessionId, title);
++      ui.set((state) => ({ ...state, toast: { kind: "success", text: t("Whale Companion bound to {name}", { name: result.title || title || sessionId }), token: Date.now() } }));
++    },
+     // `id` opens one Bot (page 'bots') or one group chat (page 'groups').
+     openSettings: (page = "general", id = null) => {
+       ui.set((state) => ({ ...state, settings: { page, id }, menu: null, palette: null, newChat: null }));
+diff --git a/ds-bot/src/client/context-menu.js b/ds-bot/src/client/context-menu.js
+index 48b0018..246c98a 100644
+--- a/ds-bot/src/client/context-menu.js
++++ b/ds-bot/src/client/context-menu.js
+@@ -1,7 +1,7 @@
+ import { createElement as h, Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
+ import { isMainOf } from './sources.js'
+ import { currentPart } from './text.js'
+-import { GearIcon, PinIcon, UnreadIcon, PencilIcon, StarLineIcon, CopyIcon, HideIcon, TrashIcon, DuplicateIcon } from './icons.js'
++import { GearIcon, PinIcon, UnreadIcon, PencilIcon, StarLineIcon, CopyIcon, HideIcon, TrashIcon, DuplicateIcon, ConnectorIcon } from './icons.js'
+ import { useEscape } from './overlay-hooks.js'
+ import { t } from './i18n.js'
+ 
+@@ -41,7 +41,10 @@ export function ContextMenu({ menu, roster, actions, leaving = false }) {
+       bot && !isMainBot ? [t('Make Main Bot'), StarLineIcon, () => actions.setMain(bot.id, true)] : null,
+       bot && isMainBot && mainCount > 1 ? [t('Remove Main Bot role'), StarLineIcon, () => actions.setMain(bot.id, false)] : null,
+     ],
+-    [[t('Copy conversation ID'), CopyIcon, () => navigator.clipboard?.writeText(bot ? currentPart(bot) : menu.id)]],
++    [
++      bot ? [t('Bind Whale Companion'), ConnectorIcon, () => actions.bindWhale(currentPart(bot),bot.name)] : null,
++      [t('Copy conversation ID'), CopyIcon, () => navigator.clipboard?.writeText(bot ? currentPart(bot) : menu.id)],
++    ],
+     [
+       isMainBot ? null : [t('Hide from sidebar'), HideIcon, () => actions.setFlags(menu.id, { hidden: true })],
+       isMainBot ? null : [room ? t('Delete group') : t('Delete'), TrashIcon, () => (bot ? actions.deleteBot(bot.id) : actions.deleteRoom(menu.id)), true],
+diff --git a/ds-bot/src/client/feedback.js b/ds-bot/src/client/feedback.js
+index 05a4220..740341c 100644
+--- a/ds-bot/src/client/feedback.js
++++ b/ds-bot/src/client/feedback.js
+@@ -133,9 +133,9 @@ export function ErrorToast({ useUi, actions }) {
+     return () => { clearTimeout(fade); clearTimeout(gone) }
+   }, [toast?.token])
+   if (!toast) return null
+-  return h('div', { className: 'bt-toast', role: 'alert', 'data-leaving': leaving || undefined },
++  return h('div', { className: 'bt-toast', role: toast.kind === 'success' ? 'status' : 'alert', 'data-kind': toast.kind, 'data-leaving': leaving || undefined },
+     h('span', { className: 'bt-toast-text' }, toast.text),
+-    h('button', { type: 'button', className: 'bt-toast-link', onClick: () => { actions.dismissToast(toast.token); actions.openSettings('feedback') } }, t('Details')),
++    toast.kind === 'success' ? null : h('button', { type: 'button', className: 'bt-toast-link', onClick: () => { actions.dismissToast(toast.token); actions.openSettings('feedback') } }, t('Details')),
+     h('button', { type: 'button', className: 'bt-icon-btn bt-toast-close', 'aria-label': t('Dismiss'), onClick: () => actions.dismissToast(toast.token) }, h(CloseIcon)))
+ }
+ 
+@@ -159,6 +159,7 @@ export const FEEDBACK_CSS = `
+ .bt-toast[data-leaving]{opacity:0;transform:translate(-50%,6px) scale(.98);filter:blur(3px);transition:opacity .18s ease-in,transform .18s ease-in,filter .18s ease-in}
+ .bt-toast-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
+ .bt-toast-text::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:#e02135;margin:0 8px 1px 0}
++.bt-toast[data-kind="success"] .bt-toast-text::before{background:#21854a}
+ .bt-toast-link{flex:none;border:0;background:none;color:var(--bt-ink-2);font:inherit;font-size:12px;cursor:pointer;padding:4px 6px;border-radius:6px}
+ .bt-toast-link:hover{background:var(--bt-hover);color:var(--bt-ink)}
+ .bt-toast-close{flex:none}
+diff --git a/ds-bot/src/client/i18n.js b/ds-bot/src/client/i18n.js
+index a12a939..55f9727 100644
+--- a/ds-bot/src/client/i18n.js
++++ b/ds-bot/src/client/i18n.js
+@@ -5,6 +5,19 @@
+ export const NAMESPACE = 'ds-bot'
+ 
+ const ZH = {
++  'Voice: Whale Companion': '语音：鲸鱼娘',
++  'Voice: Browser': '语音：浏览器',
++  'Voice unavailable': '语音不可用',
++  'Connecting Whale voice…': '正在连接鲸鱼娘语音…',
++  'Whale voice is unavailable. Open the companion and check Doubao voice and Sound.': '鲸鱼娘语音不可用。请打开桌宠，检查豆包语音配置并开启 Sound，然后重新通话。',
++  'Whale playback stopped. Resume listening when you are ready.': '鲸鱼娘播放已停止。准备好后可恢复聆听。',
++  'Open the updated Whale Companion on the Harness host.': '请在运行 Harness 的电脑上打开新版鲸鱼娘桌宠。',
++  'Configure Doubao voice and enable Sound in Whale Companion.': '请在鲸鱼娘中配置豆包语音并开启 Sound。',
++  'Another Whale voice call is already open.': '已有一通鲸鱼娘语音通话，请先结束它。',
++  'Whale Companion is disconnected.': '鲸鱼娘桌宠已断开。',
++  'This Whale voice call has ended. Close the call and try again.': '鲸鱼娘通话已结束，请关闭后重新拨打。',
++  'Resume the call before speaking again.': '请先恢复通话，再继续说话。',
++  'Whale voice failed. Check Doubao voice access and balance in the companion.': '鲸鱼娘合成语音失败，请检查豆包语音权限、余额及桌宠状态。',
+   // Shared
+   'Main Bot': '主 Bot',
+   Working: '工作中',
+@@ -296,6 +309,11 @@ const ZH = {
+   'Group settings': '群设置',
+   'Rename group': '重命名群聊',
+   'Copy conversation ID': '复制对话 ID',
++  'Bind Whale Companion': '绑定鲸鱼娘',
++  'Whale Companion bound to {name}': '鲸鱼娘已绑定到「{name}」',
++  'Enable the dsh-whale-voice plugin to bind Whale Companion.': '请启用 dsh-whale-voice 插件，再绑定鲸鱼娘。',
++  'Whale binding is unavailable. Enable dsh-whale-voice and try again.': '暂时无法绑定鲸鱼娘，请确认 dsh-whale-voice 插件已启用后重试。',
++  'This conversation is no longer available. Refresh the sidebar and try again.': '这个会话已不可用，请刷新侧边栏后重试。',
+   'Hide from sidebar': '从侧栏隐藏',
+   '{name} actions': '{name} 的操作',
+   // The DSH Agent's own row and Session list. "DSH Agent" is a product name and
+diff --git a/ds-bot/src/client/index.js b/ds-bot/src/client/index.js
+index 6f8543f..a5f2a47 100644
+--- a/ds-bot/src/client/index.js
++++ b/ds-bot/src/client/index.js
+@@ -1,4 +1,5 @@
+ import { call } from './api.js'
++import { bindWhale } from './whale.js'
+ import { isHex, inkText, paintCss } from './inks.js'
+ import { SHAPES, markupCache, maskOf } from './characters.js'
+ import { createSource, EMPTY_ROSTER, indexRoster, isAgentSession } from './sources.js'
+@@ -25,7 +26,7 @@ import { USAGE_CSS } from './usage-page.js'
+ import { SCHEDULE_CSS } from './schedules.js'
+ import { STORAGE, migrateStorage } from './storage.js'
+ import { groupsFor, readMode, writeMode } from './surface.js'
+-import { installLocale, language } from './i18n.js'
++import { installLocale, language, t } from './i18n.js'
+ import { noteClientError, quietly } from './diagnostics.js'
+ import { ErrorToast, FEEDBACK_CSS } from './feedback.js'
+ import { ABOUT_CSS } from './about.js'
+@@ -444,6 +445,10 @@ export function apply(ctx) {
+     showDetails: (id, tab = null) => { ui.set(state => ({ ...state, details: id, view: 'details', renaming: false, tab })) },
+     // Opening the conversation would move focus to its composer and blur the name field.
+     renameBot: (id) => { ui.set(state => ({ ...state, details: id, view: 'details', renaming: true, tab: null })) },
++    bindWhale: async (sessionId, title) => {
++      const result = await bindWhale(sessionId,title)
++      ui.set(state => ({ ...state, toast:{kind:'success',text:t('Whale Companion bound to {name}',{name:result.title || title || sessionId}),token:Date.now()} }))
++    },
+     // `id` opens one Bot (page 'bots') or one group chat (page 'groups').
+     openSettings: (page = 'general', id = null) => { ui.set(state => ({ ...state, settings: { page, id }, menu: null, palette: null, newChat: null })) },
+     closeSettings: () => { ui.set(state => (state.settings ? { ...state, settings: null } : state)) },
+diff --git a/ds-bot/src/client/voice.js b/ds-bot/src/client/voice.js
+index d68e6b6..2463968 100644
+--- a/ds-bot/src/client/voice.js
++++ b/ds-bot/src/client/voice.js
+@@ -7,11 +7,13 @@ import { Shimmer } from './cells.js'
+ import { useEscape, usePaneLeft } from './overlay-hooks.js'
+ import { t } from './i18n.js'
+ import { openCapture, speechCatalog, transcribeWave, turnDetector } from './speech.js'
++import { WhaleCall } from './whale-call.js'
+ 
+ // Voice chat: listen, send what the user said, read the Bot's answer aloud, listen
+ // again. With DSH's Voice Input plugin on, its recognizer hears the user: one
+ // recording ends after a pause and is transcribed whole. Otherwise the browser's
+-// own speech recognition does. The browser's speech synthesis reads the answer.
++// own speech recognition does. Whale Companion reads replies when its plugin is
++// installed; otherwise the browser's speech synthesis reads the answer.
+ const plainSpeech = text => stripHeader(text).replace(/```[\s\S]*?```/g, ' ').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[*_`#>|~-]+/g, ' ').replace(/\s+/g, ' ').trim()
+ const VOICE_LABELS = {
+   listening: 'Listening', thinking: 'Thinking', speaking: 'Speaking', paused: 'Paused',
+@@ -69,12 +71,21 @@ export function VoiceMode({ sessionId, roster, actions, useSessions, useSessionS
+   })
+   // The Voice Input plugin's Remote, read once: the engine does not change mid-chat.
+   const [speech] = useState(() => actions.speech())
++  const inputReady = useRef(!speech && !!speechApi())
+   const [phase, setPhase] = useState(speech ? 'starting' : speechApi() ? 'listening' : 'unsupported')
+   const [catalog, setCatalog] = useState(null)
+   const [heard, setHeard] = useState('')
+   const [said, setSaid] = useState('')
+   const [note, setNote] = useState('')
+   const [serviceLevel, setServiceLevel] = useState(0)
++  const [output, setOutput] = useState('starting')
++  const [voiceError, setVoiceError] = useState('')
++  const [playbackDone, setPlaybackDone] = useState(false)
++  const call = useRef(null)
++  const awaitingAudio = useRef(false)
++  const resuming = useRef(false)
++  const phaseRef = useRef(phase)
++  phaseRef.current = phase
+   const [cycle, setCycle] = useState(0)
+   const waiting = useRef(null)
+   const reply = useRef(lastReply)
+@@ -82,20 +93,74 @@ export function VoiceMode({ sessionId, roster, actions, useSessions, useSessionS
+   // Bumped on pause and close, so a transcript that arrives later is dropped.
+   const turn = useRef(0)
+   const paneLeft = usePaneLeft()
+-  const close = () => { turn.current += 1; window.speechSynthesis?.cancel(); actions.closeVoice() }
++  const close = () => { turn.current += 1; call.current?.close(); window.speechSynthesis?.cancel(); actions.closeVoice() }
+   useEscape(close)
+-  const submit = (text) => {
++  const submit = async (text) => {
++    const own = turn.current
+     setHeard(text)
++    setSaid('')
+     setPhase('thinking')
+-    waiting.current = reply.current.split('|')[0]
+-    void actions.send(sessionId, text.trim()).catch(() => setPhase('listening'))
++    setPlaybackDone(false)
++    try {
++      if (call.current) await call.current.control('call_prepare')
++      if (own !== turn.current) return
++      awaitingAudio.current = !!call.current
++      waiting.current = reply.current.split('|')[0]
++      await actions.send(sessionId, text.trim())
++    } catch {
++      if (own !== turn.current) return
++      awaitingAudio.current = false
++      if (call.current) { void call.current.control('call_pause').catch(() => {}); setVoiceError(t('Whale voice is unavailable. Open the companion and check Doubao voice and Sound.')); setPhase('paused') }
++      else setPhase('listening')
++    }
+   }
+   const dictation = useDictation((text, final) => {
++    if (phaseRef.current !== 'listening') return
+     setHeard(text)
+     if (!final) return
+     dictation.stop()
+     submit(text)
+   })
++  useEffect(() => {
++    let live = true
++    const failed = () => {
++      if (!live) return
++      awaitingAudio.current = false; turn.current += 1
++      setVoiceError(t('Whale voice is unavailable. Open the companion and check Doubao voice and Sound.'))
++      setOutput('error'); setPhase('paused')
++    }
++    const connection = new WhaleCall(state => {
++      if (!live) return
++      if (awaitingAudio.current && typeof state.text === 'string') setSaid(plainSpeech(state.text))
++      if (state.phase === 'ready') {
++        window.speechSynthesis?.cancel()
++        setOutput('whale')
++        if (resuming.current) { resuming.current = false; setVoiceError(''); setPlaybackDone(false); setPhase(inputReady.current ? 'listening' : speech ? 'setup' : 'unsupported') }
++      }
++      if (state.phase === 'speaking' && awaitingAudio.current) setPhase('speaking')
++      if (state.phase === 'finished' && awaitingAudio.current) setPlaybackDone(true)
++      if (state.phase === 'failed' || state.phase === 'cancelled') {
++        awaitingAudio.current = false; resuming.current = false; turn.current += 1
++        setOutput('whale')
++        setVoiceError(t(state.reason || 'Whale playback stopped. Resume listening when you are ready.')); setPhase('paused')
++      }
++    }, failed)
++    call.current = connection
++    connection.open(sessionId).then(enabled => {
++      if (!live) return
++      if (!enabled) { call.current = null; setOutput('browser') }
++    }, failed)
++    return () => { live = false; turn.current += 1; connection.close(); if (call.current === connection) call.current = null }
++  }, [sessionId])
++  useEffect(() => {
++    if (output === 'browser' && !speech && phase === 'starting') setPhase(speechApi() ? 'listening' : 'unsupported')
++    if (output === 'whale' && !speech && phase === 'starting') setPhase(speechApi() ? 'listening' : 'unsupported')
++  }, [output, speech, phase])
++  useEffect(() => {
++    // Native completion already means final text + actual audio drain; projections may lag.
++    if (!playbackDone || !awaitingAudio.current) return
++    awaitingAudio.current = false; waiting.current = null; setHeard(''); setPlaybackDone(false); setPhase('listening')
++  }, [playbackDone])
+   useEffect(() => {
+     if (!note) return undefined
+     const timer = setTimeout(() => setNote(''), 2600)
+@@ -107,16 +172,17 @@ export function VoiceMode({ sessionId, roster, actions, useSessions, useSessionS
+     speechCatalog(speech).then(({ catalog: next, usable }) => {
+       if (!live) return
+       setCatalog(next)
+-      setPhase(usable ? 'listening' : 'setup')
+-    }, () => { if (live) setPhase('setup') })
++      inputReady.current = usable
++      setPhase(current => current === 'starting' ? usable ? 'listening' : 'setup' : current)
++    }, () => { if (live) setPhase(current => current === 'starting' ? 'setup' : current) })
+     return () => { live = false }
+   }, [speech])
+-  const listen = phase === 'listening'
++  const listen = phase === 'listening' && inputReady.current && (output === 'whale' || output === 'browser')
+   useEffect(() => {
+     if (speech || !listen || dictation.listening) return undefined
+-    const timer = setTimeout(() => dictation.start({ continuous: false, onEnd: () => {} }), 250)
++    const timer = setTimeout(() => dictation.start({ continuous: false, onEnd: () => {} }), output === 'whale' ? 50 : 250)
+     return () => clearTimeout(timer)
+-  }, [listen, dictation.listening])
++  }, [listen, dictation.listening, output])
+   // Recognition stops on silence; keep listening until the user pauses or ends.
+   useEffect(() => {
+     if (phase !== 'listening') dictation.stop()
+@@ -180,13 +246,14 @@ export function VoiceMode({ sessionId, roster, actions, useSessions, useSessionS
+     }
+   }, [speech, catalog, listen, cycle])
+   useEffect(() => {
+-    if (phase !== 'thinking' || running || waiting.current === null) return
++    if (output !== 'browser' || phase !== 'thinking' || running || waiting.current === null) return
+     const [count, text] = [lastReply.slice(0, lastReply.indexOf('|')), lastReply.slice(lastReply.indexOf('|') + 1)]
+     if (count === waiting.current || !text.trim()) return
+     waiting.current = null
+     const spoken = plainSpeech(text)
+     setSaid(spoken)
+     setHeard('')
++    if (output !== 'browser') return
+     if (!window.speechSynthesis || !spoken) { setPhase('listening'); return }
+     const utterance = new SpeechSynthesisUtterance(spoken)
+     utterance.lang = /[\u3400-\u9fff]/.test(spoken) ? 'zh-CN' : 'en-US'
+@@ -195,21 +262,30 @@ export function VoiceMode({ sessionId, roster, actions, useSessions, useSessionS
+     setPhase('speaking')
+     window.speechSynthesis.cancel()
+     window.speechSynthesis.speak(utterance)
+-  }, [phase, running, lastReply])
++  }, [phase, running, lastReply, output])
+   useEffect(() => () => window.speechSynthesis?.cancel(), [])
+   const micLevel = useMicLevel(!speech && phase === 'listening' && dictation.listening)
+   const level = speech ? serviceLevel : micLevel
+   const markState = phase === 'thinking' || phase === 'transcribing' ? 'thinking' : phase === 'speaking' ? 'sending' : 'idle'
+-  const blocked = phase === 'unsupported' || phase === 'setup' || phase === 'starting'
+-  const togglePause = () => {
+-    if (phase === 'paused') { setPhase('listening'); return }
++  const blocked = phase === 'unsupported' || phase === 'setup' || phase === 'starting' || output === 'starting' || output === 'error'
++  const togglePause = async () => {
++    if (phase === 'paused') {
++      if (resuming.current) return
++      try {
++        if (call.current) { resuming.current = true; await call.current.control('call_resume') }
++        else { setVoiceError(''); setPlaybackDone(false); setPhase('listening') }
++      } catch { resuming.current = false; setVoiceError(t('Whale voice is unavailable. Open the companion and check Doubao voice and Sound.')) }
++      return
++    }
+     turn.current += 1
++    awaitingAudio.current = false; setPlaybackDone(false)
+     window.speechSynthesis?.cancel()
+     setPhase('paused')
++    if (call.current) void call.current.control('call_pause').catch(() => {})
+   }
+   const openSetup = phase === 'setup' ? actions.voiceSetup() : null
+-  const caption = phase === 'speaking' ? said : heard
+-  const shownNote = note || dictation.note
++  const caption = output === 'whale' && said ? said : phase === 'speaking' ? said : heard
++  const shownNote = voiceError || note || dictation.note
+   return h('div', { className: 'bt-pane bt-voice-pane', style: { left: paneLeft } },
+     h('div', { className: 'bt-voice-stage', role: 'dialog', 'aria-label': t('Voice chat with {name}', { name }), 'data-phase': phase === 'transcribing' ? 'thinking' : phase },
+       h('div', { className: 'bt-voice-orb', style: { '--bt-level': level } },
+@@ -217,6 +293,7 @@ export function VoiceMode({ sessionId, roster, actions, useSessions, useSessionS
+         h('span', { className: 'bt-voice-ring bt-voice-ring-2', 'aria-hidden': true }),
+         bot ? h(BotMark, { bot, size: 112, state: markState, live: true, gaze: phase === 'listening' }) : room ? h(RoomAvatar, { room, roster, size: 112 }) : null),
+       h('div', { className: 'bt-voice-name' }, name),
++      h('div', { className:'bt-voice-note' }, t(output === 'whale' ? 'Voice: Whale Companion' : output === 'browser' ? 'Voice: Browser' : output === 'error' ? 'Voice unavailable' : 'Connecting Whale voice…')),
+       h('div', { className: 'bt-voice-status', role: 'status' },
+         phase === 'thinking' ? h(Shimmer, null, t('Thinking…'))
+           : phase === 'transcribing' ? h(Shimmer, null, t('Recognizing…'))
+diff --git a/ds-bot/src/client/whale.js b/ds-bot/src/client/whale.js
+new file mode 100644
+index 0000000..0076000
+--- /dev/null
++++ b/ds-bot/src/client/whale.js
+@@ -0,0 +1,22 @@
++import { t } from './i18n.js'
++
++export async function bindWhale(sessionId, title) {
++  let response
++  try {
++    response = await fetch('api/whale-voice', {
++      method:'POST', credentials:'same-origin', headers:{'content-type':'application/json'},
++      body:JSON.stringify({action:'bind',sessionId,title}),
++    })
++  } catch {
++    throw new Error(t('Could not reach DSH. Check that it is still running.'))
++  }
++  if (response.status === 404) {
++    // An absent plugin can return HTML; a registered route returns a JSON refusal.
++    const result = await response.json().catch(() => null)
++    if (result?.error) throw new Error(t('This conversation is no longer available. Refresh the sidebar and try again.'))
++    throw new Error(t('Enable the dsh-whale-voice plugin to bind Whale Companion.'))
++  }
++  const result = await response.json().catch(() => null)
++  if (!response.ok || !result?.ok) throw new Error(t('Whale binding is unavailable. Enable dsh-whale-voice and try again.'))
++  return result.value
++}
+diff --git a/ds-bot/src/client/whale-call.js b/ds-bot/src/client/whale-call.js
+new file mode 100644
+index 0000000..a184d2c
+--- /dev/null
++++ b/ds-bot/src/client/whale-call.js
+@@ -0,0 +1,47 @@
++import { t } from './i18n.js'
++
++export class WhaleCall {
++  constructor(onState, onError) {
++    this.onState = onState; this.onError = onError
++    this.id = null; this.closed = false; this.revision = -1; this.timer = null
++  }
++  async request(action, extra = {}) {
++    const controller = new AbortController()
++    const timeout = setTimeout(() => controller.abort(), 5000)
++    try {
++      const response = await fetch('api/whale-voice', {
++        method:'POST', credentials:'same-origin', headers:{'content-type':'application/json'},
++        body:JSON.stringify({action,...(this.id ? {id:this.id} : {}),...extra}),
++        signal:controller.signal, keepalive:action === 'call_end',
++      })
++      const result = await response.json().catch(() => null)
++      if (action === 'call_start' && response.status === 404 && !result?.error) return null
++      if (!response.ok || !result?.ok) throw new Error(t(result?.error || 'Whale voice is unavailable. Open the companion and check Doubao voice and Sound.'))
++      return result.value
++    } finally { clearTimeout(timeout) }
++  }
++  accept(state) {
++    if (this.closed || !state || state.id !== this.id || state.revision < this.revision) return
++    this.revision = state.revision; this.onState(state)
++  }
++  async open(sessionId) {
++    const state = await this.request('call_start',{sessionId})
++    if (!state) return false
++    this.id = state.id
++    if (this.closed) { await this.request('call_end').catch(() => {}); return true }
++    this.accept(state); this.poll(); return true
++  }
++  poll() {
++    this.timer = setTimeout(async () => {
++      try { this.accept(await this.request('call_poll')) }
++      catch { if (!this.closed) { this.onError(); this.close() }; return }
++      if (!this.closed) this.poll()
++    }, 250)
++  }
++  async control(action) { const state = await this.request(action); this.accept(state); return state }
++  close() {
++    if (this.closed) return
++    this.closed = true; clearTimeout(this.timer)
++    if (this.id) void this.request('call_end').catch(() => {})
++  }
++}
+diff --git a/ds-bot/test/whale.test.js b/ds-bot/test/whale.test.js
+new file mode 100644
+index 0000000..0b3a596
+--- /dev/null
++++ b/ds-bot/test/whale.test.js
+@@ -0,0 +1,25 @@
++import { test } from 'node:test'
++import assert from 'node:assert/strict'
++import { bindWhale } from '../src/client/whale.js'
++import { currentPart } from '../src/client/text.js'
++
++test('whale binding submits the current conversation part with same-origin authentication',async t=>{
++  const original=globalThis.fetch;t.after(()=>{globalThis.fetch=original})
++  globalThis.fetch=async (path,options)=>{
++    assert.equal(path,'api/whale-voice');assert.equal(options.credentials,'same-origin')
++    assert.deepEqual(JSON.parse(options.body),{action:'bind',sessionId:'new-part',title:'Writer'})
++    return Response.json({ok:true,value:{sessionId:'new-part',title:'Writer'}})
++  }
++  const bot={id:'old-part',sessionId:'new-part',name:'Writer'}
++  assert.deepEqual(await bindWhale(currentPart(bot),bot.name),{sessionId:'new-part',title:'Writer'})
++})
++
++test('whale binding distinguishes a missing plugin, stale conversation and network failure',async t=>{
++  const original=globalThis.fetch;t.after(()=>{globalThis.fetch=original})
++  globalThis.fetch=async()=>new Response('<html>Not found</html>',{status:404})
++  await assert.rejects(bindWhale('part','Writer'),/Enable the dsh-whale-voice plugin/)
++  globalThis.fetch=async()=>Response.json({ok:false,error:'missing'},{status:404})
++  await assert.rejects(bindWhale('part','Writer'),/conversation is no longer available/)
++  globalThis.fetch=async()=>{throw new Error('offline')}
++  await assert.rejects(bindWhale('part','Writer'),/Could not reach DSH/)
++})
+diff --git a/ds-bot/test/whale-call.test.js b/ds-bot/test/whale-call.test.js
+new file mode 100644
+index 0000000..23be450
+--- /dev/null
++++ b/ds-bot/test/whale-call.test.js
+@@ -0,0 +1,50 @@
++import { test } from 'node:test'
++import assert from 'node:assert/strict'
++import { WhaleCall } from '../src/client/whale-call.js'
++
++test('Whale call uses same-origin route, monotonic playback state and explicit stop',async t=>{
++  const original=globalThis.fetch;t.after(()=>{globalThis.fetch=original})
++  const actions=[],states=[]
++  globalThis.fetch=async(path,options)=>{
++    assert.equal(path,'api/whale-voice');assert.equal(options.credentials,'same-origin')
++    const body=JSON.parse(options.body);actions.push(body)
++    return Response.json({ok:true,value:{id:'mock-call',phase:body.action==='call_start'?'ready':'waiting',revision:body.action==='call_start'?1:3}})
++  }
++  const call=new WhaleCall(state=>states.push(state),()=>assert.fail('unexpected disconnect'))
++  t.after(()=>call.close())
++  assert.equal(await call.open('chosen'),true)
++  await call.control('call_prepare')
++  call.accept({id:'mock-call',revision:2,phase:'finished'})
++  call.accept({id:'old-call',revision:10,phase:'finished'})
++  assert.deepEqual(states.map(s=>s.phase),['ready','waiting'])
++  call.accept({id:'mock-call',revision:4,phase:'speaking'})
++  call.close();call.accept({id:'mock-call',revision:5,phase:'finished'})
++  assert.deepEqual(states.map(s=>s.phase),['ready','waiting','speaking'])
++  assert.deepEqual(actions,[{action:'call_start',sessionId:'chosen'},{action:'call_prepare',id:'mock-call'},{action:'call_end',id:'mock-call'}])
++})
++
++test('only an absent plugin permits browser voice; native/config failure never falls back',async t=>{
++  const original=globalThis.fetch;t.after(()=>{globalThis.fetch=original})
++  const call=new WhaleCall(()=>{},()=>{});t.after(()=>call.close())
++  globalThis.fetch=async()=>new Response('<html>not found</html>',{status:404})
++  assert.equal(await call.open('chosen'),false)
++  globalThis.fetch=async()=>Response.json({ok:false,error:'Configure Doubao voice and enable Sound in Whale Companion.'},{status:424})
++  await assert.rejects(call.open('chosen'),/Configure Doubao/)
++  globalThis.fetch=async()=>Response.json({ok:false,error:'This conversation is no longer available.'},{status:404})
++  await assert.rejects(call.open('chosen'),/conversation is no longer/)
++})
++
++test('closing while call setup is pending releases the late-created lease',async t=>{
++  const original=globalThis.fetch;t.after(()=>{globalThis.fetch=original})
++  let answer;const actions=[]
++  globalThis.fetch=async(_path,options)=>{
++    const body=JSON.parse(options.body);actions.push(body.action)
++    if(body.action==='call_start') return new Promise(resolve=>{answer=resolve})
++    return Response.json({ok:true,value:{ended:true}})
++  }
++  const call=new WhaleCall(()=>assert.fail('closed call cannot deliver state'),()=>{})
++  const pending=call.open('chosen');call.close()
++  answer(Response.json({ok:true,value:{id:'late-call',phase:'ready',revision:1}}))
++  await pending
++  assert.deepEqual(actions,['call_start','call_end'])
++})
+diff --git a/ds-bot/test/voice-mode.test.js b/ds-bot/test/voice-mode.test.js
+new file mode 100644
+index 0000000..bc52e7a
+--- /dev/null
++++ b/ds-bot/test/voice-mode.test.js
+@@ -0,0 +1,91 @@
++import { test } from 'node:test'
++import assert from 'node:assert/strict'
++import { createRequire } from 'node:module'
++import { mkdtemp, writeFile, rm } from 'node:fs/promises'
++import { join, resolve } from 'node:path'
++import { tmpdir } from 'node:os'
++import { build } from 'esbuild'
++
++const harness=process.env.DSH_HARNESS ?? resolve(import.meta.dirname,'../../deepseek-harness')
++const fromHarness=createRequire(join(harness,'apps/web/package.json'))
++const {JSDOM}=fromHarness('jsdom')
++const React=fromHarness('react')
++const {createRoot}=fromHarness('react-dom/client')
++
++test('call UI waits for actual whale audio completion, suppresses browser speech and stops on hangup',async()=>{
++  const folder=await mkdtemp(join(tmpdir(),'whale-call-ui-'))
++  const dom=new JSDOM('<div id="root"></div>',{url:'http://localhost',pretendToBeVisual:true})
++  const previous=new Map()
++  function global(name,value) {previous.set(name,Object.getOwnPropertyDescriptor(globalThis,name));Object.defineProperty(globalThis,name,{value,writable:true,configurable:true})}
++  global('window',dom.window);global('document',dom.window.document);global('navigator',dom.window.navigator)
++  global('IS_REACT_ACT_ENVIRONMENT',true)
++  let root
++  try {
++    const result=await build({entryPoints:[resolve(import.meta.dirname,'../src/client/voice.js')],bundle:true,platform:'node',format:'cjs',write:false,plugins:[{
++      name:'test-react',setup(builder){
++        builder.onResolve({filter:/^react(?:-dom)?$/},args=>({path:fromHarness.resolve(args.path),external:true}))
++        builder.onResolve({filter:/^@deepseek-ai\/dsh-client-ui-primitives$/},()=>({path:'ui',namespace:'test-ui'}))
++        builder.onLoad({filter:/.*/,namespace:'test-ui'},()=>({contents:'export const MarkdownText = () => null'}))
++      },
++    }]})
++    const compiled=join(folder,'voice.cjs');await writeFile(compiled,result.outputFiles[0].text)
++    const {VoiceMode}=createRequire(import.meta.url)(compiled)
++    let starts=0,browserSpeech=0,engine,closed=0,running=false,outline=[]
++    class Recognition {
++      constructor(){engine=this}
++      start(){starts++}
++      stop(){this.onend?.()}
++      abort(){}
++    }
++    dom.window.SpeechRecognition=Recognition
++    dom.window.speechSynthesis={cancel(){},speak(){browserSpeech++}}
++    global('SpeechSynthesisUtterance',class {constructor(){browserSpeech++;throw new Error('Browser speech must not be used')}})
++    let state={id:'mock-call',phase:'ready',revision:1,turn:null}
++    const requests=[]
++    global('fetch',async(_url,options)=>{
++      const body=JSON.parse(options.body);requests.push(body.action)
++      if(body.action==='call_prepare')state={...state,phase:'waiting',revision:state.revision+1,turn:null}
++      if(body.action==='call_pause')state={...state,phase:'paused',revision:state.revision+1}
++      if(body.action==='call_resume')state={...state,phase:'ready',revision:state.revision+1,turn:null}
++      return Response.json({ok:true,value:state})
++    })
++    const props={sessionId:'chosen',roster:{byId:{},roomsById:{}},
++      actions:{speech:()=>undefined,closeVoice(){closed++},async send(){assert.ok(requests.includes('call_prepare'));running=true},voiceSetup:()=>null},
++      useSessions:select=>select({byId:{chosen:{projectionValues:{turnOutline:outline}}}}),
++      useSessionStatus:select=>select(new Map([['chosen',{running}]])),
++    }
++    const render=()=>React.act(async()=>root.render(React.createElement(VoiceMode,props)))
++    const wait=ms=>React.act(async()=>{await new Promise(resolve=>setTimeout(resolve,ms))})
++    root=createRoot(dom.window.document.getElementById('root'))
++    await render();await wait(300)
++    assert.equal(starts,1)
++    await React.act(async()=>engine.onresult({resultIndex:0,results:[Object.assign([{transcript:'你好'}],{isFinal:true})]}))
++    assert.ok(requests.includes('call_prepare'))
++    state={...state,phase:'speaking',turn:'chosen:1',revision:3,text:'你好呀，我在这里。'};await wait(300)
++    assert.match(dom.window.document.querySelector('.bt-voice-caption').textContent,/你好呀/,'captions precede durable outline updates')
++    running=false;outline=[{response:'你好呀，我在这里。'}];await render();await wait(300)
++    assert.equal(starts,1,'model completion must not resume the microphone')
++    assert.match(dom.window.document.body.textContent,/Voice: Whale Companion/)
++    assert.equal(browserSpeech,0)
++    running=true;outline=[];await render()
++    state={...state,phase:'finished',revision:4};await wait(300);await wait(80)
++    assert.equal(starts,2,'audio drain resumes recognition even while running and transcript projections lag')
++    assert.equal(dom.window.document.querySelector('[data-phase]').dataset.phase,'listening')
++    running=false;outline=[{response:'迟到的历史文本'}];await render();await wait(300)
++    assert.equal(starts,2,'late transcript does not restart speech or recognition')
++    assert.equal(browserSpeech,0)
++    assert.match(dom.window.document.querySelector('.bt-voice-caption').textContent,/你好呀/)
++    const pause=dom.window.document.querySelector('[aria-label="Pause"]')
++    await React.act(async()=>pause.click());assert.ok(requests.includes('call_pause'))
++    await wait(300);assert.equal(starts,2)
++    await React.act(async()=>dom.window.document.querySelector('[aria-label="Resume listening"]').click())
++    await wait(300);assert.equal(starts,3)
++    await React.act(async()=>dom.window.document.querySelector('[aria-label="End voice chat"]').click())
++    assert.equal(closed,1);assert.equal(requests.at(-1),'call_end')
++  } finally {
++    if(root)await React.act(async()=>root.unmount())
++    dom.window.close()
++    for(const [name,descriptor] of previous) {if(descriptor)Object.defineProperty(globalThis,name,descriptor);else delete globalThis[name]}
++    await rm(folder,{recursive:true,force:true})
++  }
++})
