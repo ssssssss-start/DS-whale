@@ -39,7 +39,7 @@ The desktop runs on the Harness host. Voice recognition depends on the host's Vo
 
 ## Versions and updates
 
-See [versions.json](versions.json) and [CHANGELOG.md](CHANGELOG.md). Current source: desktop 0.5.0/build 14, Whale plugin 0.4.3. This repository establishes the source/version history; it does **not** implement automatic application updates. Future tagged GitHub Releases can carry plugin packages and desktop builds. Update plugins through Harness's plugin manager and rebuild/reopen the desktop when no call is active.
+See [versions.json](versions.json) and [CHANGELOG.md](CHANGELOG.md). Current source: desktop 0.5.1/build 15, Whale plugin 0.4.3. This repository establishes the source/version history; it does **not** implement automatic application updates. Future tagged GitHub Releases can carry plugin packages and desktop builds. Update plugins through Harness's plugin manager and rebuild/reopen the desktop when no call is active.
 
 ## Validation and limitations
 
@@ -48,6 +48,6 @@ node --test digital-human/harness-voice/test/*.test.mjs
 bash digital-human/desktop-preview/build.sh
 ```
 
-These checks use mock transports/audio and do not prove live microphone quality or paid API latency. Expressions are selected manually. Phoneme-level lip sync is not implemented. The tail is static after removing regional mesh distortion; elastic tail animation needs separate artwork. Fixed legacy greeting/poke/head-pat recordings and the unofficial Mira web bridge are not distributed; gestures remain available without those recordings. Dynamic Doubao speech is independent of them.
+These checks use mock transports/audio and do not prove live microphone quality or paid API latency. Expressions are selected manually. Phoneme-level lip sync is not implemented. The tail now uses a separate rear layer with an anchored root and delayed tip rotation. Fixed legacy greeting/poke/head-pat recordings and the unofficial Mira web bridge are not distributed; gestures remain available without those recordings. Dynamic Doubao speech is independent of them.
 
 Only current runtime artwork is included. User data, real API configuration, logs, generated app bundles, old experiments and the third-party reference project are excluded. No redistribution license is declared yet; see [asset notes](digital-human/desktop-preview/assets/README.md).

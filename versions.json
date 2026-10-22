@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "desktop": {
-    "version": "0.5.0",
-    "build": 14,
-    "notes": "Includes the static-tail correction; no elastic tail animation yet."
+    "version": "0.5.1",
+    "build": 15,
+    "notes": "Separate tail layer, anchored root and delayed distal rotation."
   },
   "harness_plugin": {
     "name": "dsh-whale-voice",

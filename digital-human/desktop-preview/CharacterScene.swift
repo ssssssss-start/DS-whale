@@ -11,6 +11,7 @@ final class CharacterScene: SKScene {
     private let waveMotion: WaveMotion
     private let emotions = EmotionFrames()
     private let rig = SKNode()
+    private let tailRig: TailRig
     private var nextBlink: TimeInterval = 0
     private var blinkStarted: TimeInterval?
     private var playedSerial = 0
@@ -34,12 +35,16 @@ final class CharacterScene: SKScene {
         self.closed = closed
         waveFrames = frames
         waveMotion = WaveMotion(size: base.size())
+        tailRig = TailRig(base:base)
         character = SKSpriteNode(texture: base)
+        character.zPosition = 1
+        character.subdivisionLevels = 0
         eyeOverlay = SKSpriteNode(texture: closed)
         super.init(size: size)
         scaleMode = .resizeFill
         backgroundColor = .clear
         addChild(rig)
+        rig.addChild(tailRig.node)
         rig.addChild(character)
         // Put the blend boundary in the hair, outside all eye and eyebrow outlines.
         let crop = SKCropNode()
@@ -54,7 +59,7 @@ final class CharacterScene: SKScene {
         """)
         crop.maskNode = mask
         crop.addChild(eyeOverlay)
-        crop.zPosition = 1
+        crop.zPosition = 2
         rig.addChild(crop)
         eyeOverlay.alpha = 0
         for y in 0...rows {
@@ -146,6 +151,7 @@ final class CharacterScene: SKScene {
         let greeting = behavior == .greeting
         let duration = interaction.duration
         rig.zRotation = CGFloat(sin(time * 3.4) * speakingLevel * 0.008)
+        tailRig.update(time:time,enabled:idleMotion,greetingElapsed:greeting ? elapsed : nil)
         if greeting {
             // Each pose is the complete supplied drawing, including shoulder, hand and expression.
             eyeOverlay.alpha = 0
@@ -158,10 +164,11 @@ final class CharacterScene: SKScene {
                 pose = waveRecovery!.at((time - start) / (interaction.ends - start))
             } else { pose = WavePose.at(elapsed, duration:duration) }
             waveMotion.apply(pose, frames: waveFrames, to: character)
+            if elapsed < 0.30, let texture = character.texture { character.texture = tailRig.bodyTexture(texture) }
             return
         }
         character.shader = nil
-        character.texture = emotions.texture(behavior,level:envelope) ?? base
+        character.texture = tailRig.bodyTexture(emotions.texture(behavior,level:envelope) ?? base)
         if behavior.isEmotion { eyeOverlay.alpha = 0 }
         var destinations = meshPoints
         let active = idleMotion ? 1.0 : 0.0

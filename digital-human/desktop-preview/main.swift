@@ -276,6 +276,7 @@ if CommandLine.arguments.contains("--self-test") {
     runInteractionChecks()
     runEmotionChecks()
     runWaveChecks()
+    runTailChecks()
     runProactiveSettingsChecks()
     runVoicePolicyChecks()
     runVoiceStreamChecks()
@@ -286,6 +287,10 @@ if CommandLine.arguments.contains("--self-test") {
 } else if CommandLine.arguments.contains("--pcm-audio-check") {
     _ = NSApplication.shared
     try runPCMAudioCheck()
+} else if let index = CommandLine.arguments.firstIndex(of: "--export-tail"), CommandLine.arguments.count > index + 1 {
+    _ = NSApplication.shared
+    do { try exportTailPreview(to:URL(fileURLWithPath:CommandLine.arguments[index+1])) }
+    catch { print("Tail preview failed: \(error)"); exit(1) }
 } else if let index = CommandLine.arguments.firstIndex(of: "--export-wave"), CommandLine.arguments.count > index + 1 {
     _ = NSApplication.shared
     do { try exportWavePreview(to: URL(fileURLWithPath: CommandLine.arguments[index + 1])) }

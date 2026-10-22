@@ -127,3 +127,32 @@ func exportExpressionPreviews(to folder: URL, emotionsOnly: Bool = false) throws
     }
     print("Exported expression checks: readable holds, smooth recovery and rendered previews (no voice API).")
 }
+
+func exportTailPreview(to folder: URL) throws {
+    try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
+    let source = Bundle.main.url(forResource:"wave-reference-full",withExtension:"png")!
+    let art = FullBodyFrames(url:source)!
+    TailRig(base:art.textures[0]).exportLayers(base:art.textures[0],to:folder)
+    let size = CGSize(width:432,height:534)
+    let view = SKView(frame:CGRect(origin:.zero,size:size))
+    view.allowsTransparency = true; view.isPaused = true
+    let scene = CharacterScene(size:size,frames:art.textures)
+    scene.previewTime = 0; scene.idleMotion = true
+    view.presentScene(scene)
+    let gif = CGImageDestinationCreateWithURL(folder.appendingPathComponent("tail.gif") as CFURL,UTType.gif.identifier as CFString,144,nil)!
+    CGImageDestinationSetProperties(gif,[kCGImagePropertyGIFDictionary:[kCGImagePropertyGIFLoopCount:0]] as CFDictionary)
+    // Warm the amplitude envelope before recording a closed 4.8-second loop.
+    for i in 0..<144 { scene.previewTime = Double(i)/30; scene.update(Double(i)/30) }
+    for i in 0..<144 {
+        let t = 4.8+Double(i)/30
+        scene.previewTime = t; scene.update(t)
+        let image = view.texture(from:scene,crop:CGRect(origin:.zero,size:size))!.cgImage()
+        CGImageDestinationAddImage(gif,image,[kCGImagePropertyGIFDictionary:[kCGImagePropertyGIFDelayTime:1.0/30,kCGImagePropertyGIFUnclampedDelayTime:1.0/30]] as CFDictionary)
+        if [0,36,72,108].contains(i) {
+            let png = CGImageDestinationCreateWithURL(folder.appendingPathComponent("tail-\(i).png") as CFURL,UTType.png.identifier as CFString,1,nil)!
+            CGImageDestinationAddImage(png,image,nil); precondition(CGImageDestinationFinalize(png))
+        }
+    }
+    precondition(CGImageDestinationFinalize(gif))
+    print("Exported tail preview (no voice API): \(folder.path)")
+}
