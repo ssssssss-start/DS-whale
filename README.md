@@ -39,7 +39,7 @@ The desktop runs on the Harness host. Voice recognition depends on the host's Vo
 
 ## Versions and updates
 
-See [versions.json](versions.json) and [CHANGELOG.md](CHANGELOG.md). Current source: desktop 0.5.1/build 15, Whale plugin 0.4.3. This repository establishes the source/version history; it does **not** implement automatic application updates. Future tagged GitHub Releases can carry plugin packages and desktop builds. Update plugins through Harness's plugin manager and rebuild/reopen the desktop when no call is active.
+See [versions.json](versions.json) and [CHANGELOG.md](CHANGELOG.md). Current source: desktop 0.5.2/build 16, Whale plugin 0.4.3. This repository establishes the source/version history; it does **not** implement automatic application updates. Future tagged GitHub Releases can carry plugin packages and desktop builds. Update plugins through Harness's plugin manager and rebuild/reopen the desktop when no call is active.
 
 ## Validation and limitations
 

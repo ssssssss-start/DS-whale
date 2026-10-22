@@ -21,6 +21,7 @@ final class CharacterScene: SKScene {
     var idleMotion = !UserDefaults.standard.bool(forKey: "idleMotionDisabled")
     var onInteraction: (() -> Void)?
     var speakingLevel = 0.0
+    var headpatHeld = false
     var lastTime: TimeInterval = 0
     var previewTime: TimeInterval?
     private let columns = 24
@@ -100,15 +101,17 @@ final class CharacterScene: SKScene {
         waveRecovery = nil
         headpatStartClosure = eyeClosure
         blinkStarted = nil
-        nextBlink = time + 3.2
+        nextBlink = time + 12.0
         if previewTime == nil { feedback.play(interaction.behavior) }
     }
     func beginSpeaking() {
         feedback.stop()
+        headpatHeld = false
         interaction.interrupt(at:previewTime ?? ProcessInfo.processInfo.systemUptime)
     }
     func suspend() {
         feedback.stop()
+        headpatHeld = false
         interaction.reset()
         blinkStarted = nil; eyeOverlay.alpha = 0; eyeClosure = 0; waveRecovery = nil
         isPaused = true
@@ -120,21 +123,22 @@ final class CharacterScene: SKScene {
     override func update(_ currentTime: TimeInterval) {
         let time = previewTime ?? ProcessInfo.processInfo.systemUptime
         lastTime = time
+        if headpatHeld { interaction.holdHeadPat(at:time) }
         interaction.advance(to: time)
         playNewInteraction(at:time)
         let behavior = interaction.behavior
         let elapsed = interaction.elapsed(at: time)
         let envelope = interaction.envelope(at: time)
-        if nextBlink == 0 { nextBlink = time + 2.2 }
-        if behavior != .idle { nextBlink = time + 3.2 }
+        if nextBlink == 0 { nextBlink = time + 8.0 }
+        if behavior != .idle { nextBlink = time + 12.0 }
         if behavior == .idle && time >= nextBlink {
             blinkStarted = time
-            nextBlink = time + Double.random(in: 3.2...6.4)
+            nextBlink = time + Double.random(in: 14.0...22.0)
         }
         var blink = 0.0
         if let start = blinkStarted {
             let t = time - start
-            if t < BlinkTiming.duration { blink = BlinkTiming.closure(at:t) }
+            if t < IdleSmileTiming.duration { blink = IdleSmileTiming.closure(at:t) }
             else { blinkStarted = nil }
         }
         eyeClosure = behavior == .headpat
@@ -151,7 +155,7 @@ final class CharacterScene: SKScene {
         let greeting = behavior == .greeting
         let duration = interaction.duration
         rig.zRotation = CGFloat(sin(time * 3.4) * speakingLevel * 0.008)
-        tailRig.update(time:time,enabled:idleMotion,greetingElapsed:greeting ? elapsed : nil)
+        tailRig.update(time:time,enabled:idleMotion,headpat:behavior == .headpat ? envelope : 0,greetingElapsed:greeting ? elapsed : nil)
         if greeting {
             // Each pose is the complete supplied drawing, including shoulder, hand and expression.
             eyeOverlay.alpha = 0

@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "desktop": {
-    "version": "0.5.1",
-    "build": 15,
-    "notes": "Separate tail layer, anchored root and delayed distal rotation."
+    "version": "0.5.2",
+    "build": 16,
+    "notes": "Restore hidden hair, strengthen head-pat tail motion and hold smiling expressions."
   },
   "harness_plugin": {
     "name": "dsh-whale-voice",

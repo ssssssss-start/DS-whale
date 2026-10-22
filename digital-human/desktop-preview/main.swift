@@ -25,6 +25,7 @@ final class CharacterView: SKView {
                 guard let self, self.downPoint != nil, !self.dragging else { return }
                 self.patted = true
                 self.characterScene.request(.headpat)
+                self.characterScene.headpatHeld = true
             }
         }
     }
@@ -32,10 +33,11 @@ final class CharacterView: SKView {
         guard let start = downPoint else { return }
         let current = NSEvent.mouseLocation
         let dx = current.x - start.x, dy = current.y - start.y
-        if hypot(dx, dy) > 5 { dragging = true; longPress?.invalidate() }
+        if hypot(dx, dy) > 5 { dragging = true; longPress?.invalidate(); characterScene.headpatHeld = false }
         if dragging { window?.setFrameOrigin(CGPoint(x: downOrigin.x + dx, y: downOrigin.y + dy)) }
     }
     override func mouseUp(with event: NSEvent) {
+        characterScene.headpatHeld = false
         longPress?.invalidate()
         longPress = nil
         if downPoint != nil && !dragging && !patted { characterScene.request(.poke) }

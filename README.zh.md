@@ -39,7 +39,7 @@
 
 ## 版本与更新
 
-查看 [versions.json](versions.json) 和 [更新记录](CHANGELOG.md)。当前桌宠 0.5.1/build 15、鲸鱼娘插件 0.4.3。此仓库先建立源码及版本记录，**尚未实现自动检查、下载和安装更新**。后续可通过 GitHub Releases 提供带版本的插件包、桌面构建；插件使用 Harness 插件管理器更新，桌宠在无通话时重建并重开。
+查看 [versions.json](versions.json) 和 [更新记录](CHANGELOG.md)。当前桌宠 0.5.2/build 16、鲸鱼娘插件 0.4.3。此仓库先建立源码及版本记录，**尚未实现自动检查、下载和安装更新**。后续可通过 GitHub Releases 提供带版本的插件包、桌面构建；插件使用 Harness 插件管理器更新，桌宠在无通话时重建并重开。
 
 ## 验证与限制
 

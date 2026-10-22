@@ -53,10 +53,12 @@ func exportExpressionPreviews(to folder: URL, emotionsOnly: Bool = false) throws
     try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
     let samples: [(name: String, behavior: Behavior, interrupt: Double?, duration: Double)] = emotionsOnly
         ? Behavior.emotions.map { ($0.rawValue,$0,nil,$0.minimumDuration + 0.6) } + [("shy-reply",.shy,1.2,4.7)] : [
-        ("headpat",.headpat,nil,4.5),
-        ("headpat-light",.headpat,nil,4.5),
-        ("headpat-reply",.headpat,0.7,3.6),
-        ("wave-reply",.greeting,4.5,7.4)
+        ("headpat",.headpat,nil,5.4),
+        ("headpat-light",.headpat,nil,5.4),
+        ("headpat-reply",.headpat,0.7,5.4),
+        ("wave-reply",.greeting,4.5,7.4),
+        ("idle-smile",.idle,nil,12.0),
+        ("headpat-held",.headpat,nil,9.0)
     ]
     for sample in samples {
         let size = CGSize(width:380,height:468)
@@ -79,6 +81,11 @@ func exportExpressionPreviews(to folder: URL, emotionsOnly: Bool = false) throws
         for frame in 0..<count {
             let time = Double(frame) / 30
             scene.previewTime = time
+            scene.headpatHeld = sample.name == "headpat-held" && time < 5.5
+            if sample.name == "idle-smile" && time >= 8.6 && time <= 10.5 {
+                scene.update(time)
+                assert(scene.eyeClosure > 0.99,"An idle smile must remain visible for two seconds")
+            }
             if let when = sample.interrupt, time >= when, !interrupted {
                 scene.update(time)
                 let closure = scene.eyeClosure
@@ -92,8 +99,9 @@ func exportExpressionPreviews(to folder: URL, emotionsOnly: Bool = false) throws
                 if time >= sample.behavior.minimumDuration { assert(scene.interaction.behavior == .idle) }
             }
             if sample.behavior == .headpat {
-                if time >= 0.5, time <= 2.0 { assert(scene.eyeClosure > 0.99,"Hold the full smile even during a reply") }
-                if time >= (sample.interrupt == nil ? 3.8 : 2.8) { assert(scene.eyeClosure < 0.001,"Return fully to open eyes") }
+                if time >= 0.6, time <= 3.4 { assert(scene.eyeClosure > 0.99,"Hold the full smile even during a reply") }
+                if sample.name == "headpat-held", time >= 0.6 && time <= 6.9 { assert(scene.eyeClosure > 0.99) }
+                if sample.name != "headpat-held", time >= (sample.interrupt == nil ? 4.8 : 4.5) { assert(scene.eyeClosure < 0.001,"Return fully to open eyes") }
             }
             guard let rendered = view.texture(from:scene,crop:CGRect(origin:.zero,size:size)) else { throw NSError(domain:"WhalePreview",code:1) }
             let image = rendered.cgImage()

@@ -8,10 +8,10 @@ import AppKit
 struct TailPose {
     let rootAngle: Double
     let tipAngle: Double
-    static func at(_ time: Double, strength: Double) -> TailPose {
+    static func at(_ time: Double, strength: Double, affection: Double = 0) -> TailPose {
         let phase = time * (2 * Double.pi / 4.8)
-        return TailPose(rootAngle: sin(phase) * 0.032 * strength,
-                        tipAngle: sin(phase - 0.55) * 0.025 * strength)
+        return TailPose(rootAngle: sin(phase) * 0.032 * strength * (1 + 1.5 * affection),
+                        tipAngle: sin(phase - 0.55) * 0.025 * strength * (1 + 1.5 * affection))
     }
     func point(_ p: SIMD2<Float>) -> SIMD2<Float> {
         let root = SIMD2<Double>(266, 90)
@@ -39,6 +39,8 @@ final class TailRig {
     private var bodyTextures: [ObjectIdentifier: SKTexture] = [:]
     private let points: [SIMD2<Float>]
     private var strength = 0.0
+    private var affection = 0.0
+    private let hair = SKSpriteNode()
     private var lastTime: Double?
     private let columns = 24, rows = 26
 
@@ -61,7 +63,23 @@ final class TailRig {
             rootFill.texture = SKTexture(cgImage:c.makeImage()!)
         }
         node.zPosition = 0
-        node.addChild(rootFill); node.addChild(tail)
+        let hairURL = Bundle.main.url(forResource:"hair-source",withExtension:"png",subdirectory:"tail-v1")
+        if let url = hairURL, let image = NSImage(contentsOf:url) {
+            let c = CGContext(data:nil,width:432,height:534,bitsPerComponent:8,bytesPerRow:432*4,
+                space:CGColorSpaceCreateDeviceRGB(),bitmapInfo:CGImageAlphaInfo.premultipliedLast.rawValue)!
+            // Overlap existing hair above and the skirt at left; the original foreground covers the join.
+            c.clip(to:CGRect(x:312,y:74,width:90,height:95))
+            c.draw(SKTexture(image:image).cgImage(),in:CGRect(x:0,y:0,width:432,height:534))
+            let bytes = c.data!.assumingMemoryBound(to:UInt8.self)
+            for y in 0..<534 { for x in 0..<432 {
+                let i = (y*432+x)*4
+                let feather = min(1,max(0,Double(y-365)/10)) * min(1,max(0,Double(x-312)/8))
+                for channel in 0..<4 { bytes[i+channel] = UInt8(Double(bytes[i+channel])*feather) }
+            } }
+            hair.texture = SKTexture(cgImage:c.makeImage()!); hair.size = size
+        }
+        hair.zPosition = -1
+        node.addChild(hair); node.addChild(rootFill); node.addChild(tail)
         let columns = 24, rows = 26
         points = (0...rows).flatMap { y in (0...columns).map { x in SIMD2(Float(x)/Float(columns),Float(y)/Float(rows)) } }
     }
@@ -77,18 +95,19 @@ final class TailRig {
         let maximumError = zip(source,combined).map { abs(Int($0)-Int($1)) }.max()!
         precondition(maximumError <= 2,"Neutral split must reconstruct the original without holes")
         print("Tail split check: maximum RGBA reconstruction error \(maximumError)/255")
-        for (name,image) in [("body",bodyTexture(base).cgImage()),("tail-layer",tail.texture!.cgImage()),("mask",maskImage)] {
+        for (name,image) in [("body",bodyTexture(base).cgImage()),("tail-layer",tail.texture!.cgImage()),("mask",maskImage),("hair-underlay",hair.texture!.cgImage())] {
             let dest = CGImageDestinationCreateWithURL(folder.appendingPathComponent(name+".png") as CFURL,UTType.png.identifier as CFString,1,nil)!
             CGImageDestinationAddImage(dest,image,nil); precondition(CGImageDestinationFinalize(dest))
         }
     }
-    func update(time: Double, enabled: Bool, greetingElapsed: Double? = nil) {
+    func update(time: Double, enabled: Bool, headpat: Double = 0, greetingElapsed: Double? = nil) {
         let dt = min(0.05,max(0,time - (lastTime ?? time)))
         lastTime = time
-        let target = enabled && greetingElapsed == nil ? 1.0 : 0.0
+        let target = (enabled || headpat > 0) && greetingElapsed == nil ? 1.0 : 0.0
+        affection += (max(0,min(1,headpat))-affection) * (1-exp(-dt/0.25))
         strength += (target-strength) * (1-exp(-dt/0.35))
         let entry = greetingElapsed.map { max(0,1-$0/0.30) } ?? 1
-        let pose = TailPose.at(time,strength:strength*entry)
+        let pose = TailPose.at(time,strength:strength*entry,affection:affection)
         let warp = SKWarpGeometryGrid(columns:columns,rows:rows,sourcePositions:points,destinationPositions:points.map(pose.point))
         tail.warpGeometry = warp; rootFill.warpGeometry = warp
         node.isHidden = greetingElapsed.map { $0 >= 0.30 } ?? false
@@ -137,14 +156,18 @@ final class TailRig {
 
 func runTailChecks() {
     let anchor = SIMD2<Float>(266.0/432,90.0/534)
-    var previous = TailPose.at(0,strength:1).point(SIMD2(0.94,0.29))
+    var previous = TailPose.at(0,strength:1,affection:1).point(SIMD2(0.94,0.29))
     for frame in 0...576 {
-        let pose = TailPose.at(Double(frame)/60,strength:1)
+        let pose = TailPose.at(Double(frame)/60,strength:1,affection:1)
         precondition(simd_distance(pose.point(anchor),anchor) < 0.000001,"Tail root must stay fixed")
         let tip = pose.point(SIMD2(0.94,0.29))
         precondition(simd_distance(tip,previous) < 0.002,"Tail tip must move continuously")
         previous = tip
     }
+    let calm = TailPose.at(1,strength:1)
+    let happy = TailPose.at(1,strength:1,affection:1)
+    precondition(abs(happy.rootAngle/calm.rootAngle - 2.5)<0.000001)
+    precondition(abs(happy.tipAngle/calm.tipAngle - 2.5)<0.000001)
     let neutral = TailPose.at(2,strength:0)
     for p in [anchor,SIMD2<Float>(0.9,0.2),SIMD2<Float>(0.8,0.3)] { precondition(simd_distance(neutral.point(p),p)<0.000001) }
     print("Tail checks passed: anchored root, bounded continuous tip, neutral pose when disabled.")

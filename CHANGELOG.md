@@ -1,5 +1,13 @@
 # Changelog
 
+## Desktop 0.5.2 — 2026-10-22
+
+- Restore hidden hair behind the moving tail with a fixed, feathered background patch.
+- Increase head-pat tail amplitudes smoothly to 2.5 times idle.
+- Replace the full-face 0.28-second blink with a readable idle smile (2-second hold).
+- Extend head-pat smiles and sustain them while the head is held, with gradual recovery.
+- Add sustained-press and idle-smile rendering checks; no Harness or DS Bot changes.
+
 ## Desktop 0.5.1 — 2026-10-22
 
 - Separate the original tail from the body and keep its root anchored under the skirt.

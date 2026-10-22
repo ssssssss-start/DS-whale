@@ -37,7 +37,7 @@ for emotion in shy surprised sad sleepy; do
     done
 done
 mkdir -p "$app_dir/Resources/tail-v1"
-cp "$project_dir/assets/tail-v1/root-source.png" "$app_dir/Resources/tail-v1/root-source.png"
+cp "$project_dir/assets/tail-v1/"*-source.png "$app_dir/Resources/tail-v1/"
 mkdir -p "$app_dir/Resources/sounds"
 for name in welcome poke-hum headpat; do
     if [ -f "$project_dir/assets/sounds/$name.mp3" ]; then
