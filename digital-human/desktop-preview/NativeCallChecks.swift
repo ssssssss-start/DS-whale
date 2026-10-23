@@ -48,5 +48,19 @@ func runNativeCallChecks() {
     assert(pokes == 0, "The second click cancels the pending single-click reaction")
     assert(Set(["listening","thinking","speaking","paused"].map { CallAppearance.forPhase($0).title }).count == 4)
     assert(states.contains("listening") && states.contains("thinking") && states.contains("speaking"))
+    let suite = "whale-reveal-test-\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName:suite)!
+    defer { defaults.removePersistentDomain(forName:suite) }
+    let pipeline = VoicePipeline(settings:ProactiveSettings(defaults:defaults),credential:"mock",provider:.mira,recording:false)
+    var reveals = 0
+    pipeline.onShowCompanion = { reveals += 1 }
+    pipeline.receive(["type":"start","turn":"mock-reveal","startedAt":1000.0])
+    pipeline.receive(["type":"show_companion"])
+    assert(reveals == 1 && pipeline.isPlaying,"Revealing the avatar must preserve the current reply and cannot open the microphone")
+    var hides = 0
+    pipeline.onHideCompanion = { hides += 1; pipeline.cancel() }
+    pipeline.receive(["type":"hide_companion"])
+    assert(hides == 1 && !pipeline.isPlaying,"Hiding must reach the app's hide callback and stop its reply")
+    pipeline.cancel()
     print("Native call checks passed: microphone/state ordering, multi-turn playback drain, pause/resume, offline timeout, late permission/results and single/double-click arbitration (mock microphone).")
 }

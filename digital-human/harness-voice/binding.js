@@ -1,6 +1,6 @@
 const problem = (message, status) => Object.assign(new Error(message), { status })
 
-export function createBindingRoute({ read, bind, call }) {
+export function createBindingRoute({ read, bind, call, desktop }) {
   return {
     path: '/api/whale-voice', methods: ['POST'], requestBody: 'buffered',
     async fetch(request) {
@@ -10,6 +10,9 @@ export function createBindingRoute({ read, bind, call }) {
       try {
         let body
         try { body = await request.json() } catch { throw problem('Invalid binding request.',400) }
+        if (['desktop_state','desktop_start','desktop_autostart','desktop_toggle'].includes(body?.action) && desktop) {
+          return answer({ok:true,value:await desktop(body.action)})
+        }
         if (['call_start','call_poll','call_prepare','call_pause','call_resume','call_end'].includes(body?.action) && call) {
           if (body.action === 'call_start' ? typeof body.sessionId !== 'string' || !/^[\w-]{1,200}$/.test(body.sessionId) : typeof body.id !== 'string' || !/^[\w-]{1,200}$/.test(body.id)) throw problem('Invalid call request.',400)
           return answer({ok:true,value:await call(body)})

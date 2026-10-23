@@ -6,6 +6,10 @@
 
 ## 功能
 
+- 原版精度 3D 模式保留 1,383,928 个顶点，支持转身、挥手、原地走路和摆尾，可切回 2D。
+- **◐ 白色亮度调节**实时生效并自动保存；已确认参考标准为 **94%**，蓝发等颜色维持现有效果。
+
+- 进入 Harness 自动启动一次，DS Bot 上方提供启动/显示入口；退出后可手动重开。
 - 双击角色直连后台 Harness 会话，无需打开聊天页面；支持原生收音、暂停、恢复与挂断。
 - 独立电话状态条区分连接、聆听、识别、思考、说话和暂停，随角色移动并保持可读尺寸。
 - Agent 通过 ASR 感知用户讲话，以鲸鱼娘为数字身体，并用实际动作工具控制已有表情与互动。
@@ -32,6 +36,7 @@
 
 1. macOS 安装 Apple Command Line Tools，然后运行：
    ```sh
+   bash digital-human/3d/download-model.sh  # 完整 3D 模型，可选
    bash digital-human/desktop-preview/build.sh
    open 'digital-human/desktop-preview/Whale Companion.app'
    ```
@@ -43,7 +48,7 @@
 
 ## 版本与更新
 
-查看 [versions.json](versions.json)、[中文更新说明](CHANGELOG.zh.md) 和 [English changelog](CHANGELOG.md)。当前桌宠 0.6.0/build 19、鲸鱼娘插件 0.5.0。此仓库先建立源码及版本记录，**尚未实现自动检查、下载和安装更新**。后续可通过 GitHub Releases 提供带版本的插件包、桌面构建；插件使用 Harness 插件管理器更新，桌宠在无通话时重建并重开。
+查看 [versions.json](versions.json)、[中文更新说明](CHANGELOG.zh.md) 和 [English changelog](CHANGELOG.md)。当前桌宠 0.7.2/build 25、鲸鱼娘插件 0.5.5。此仓库先建立源码及版本记录，**尚未实现自动检查、下载和安装更新**。[v0.7.2 版本附件](https://github.com/ssssssss-start/DS-whale/releases/tag/v0.7.2) 提供插件包及完整 GLB/Blender 模型；插件使用 Harness 插件管理器更新，桌宠在无通话时重建并重开。
 
 ## 验证与限制
 
@@ -52,6 +57,6 @@ node --test digital-human/harness-voice/test/*.test.mjs
 bash digital-human/desktop-preview/build.sh
 ```
 
-自动检查使用模拟传输与音频，不能代替真实麦克风、回声及付费接口延迟测试。表情可手动选择，也可由拥有身体的 Agent 通过 `whale_body` 控制；尚无音素级嘴型同步。尾巴现为身体后方的独立图层，尾根固定，尾尖延迟跟随小幅摆动。历史 Mira 网页桥接与固定欢迎、戳一戳、摸头录音不发布；缺少这些录音时动作仍可使用，豆包动态语音不受影响。
+自动检查使用模拟传输与音频，不能代替真实麦克风、回声及付费接口延迟测试。2D 表情可手动选择，也可由拥有身体的 Agent 通过 `whale_body` 控制；3D 仅声明当前已支持的动作；尚无音素级嘴型同步。2D 尾巴使用身体后方的独立图层；3D 使用骨骼摆尾，绑定、口型及眨眼仍为初稿，尚无脚部 IK 或头发/衣裙物理模拟。历史 Mira 网页桥接与固定欢迎、戳一戳、摸头录音不发布；缺少这些录音时动作仍可使用，豆包动态语音不受影响。
 
 只包含当前运行所需形象素材，不包含真实密钥、会话数据、日志、应用构建、旧实验和第三方参考项目。暂未指定分发许可证，素材说明见 [assets/README.md](digital-human/desktop-preview/assets/README.md)。

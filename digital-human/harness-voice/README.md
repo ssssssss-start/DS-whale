@@ -1,5 +1,23 @@
 # Whale voice bridge
 
+## Full-detail 3D mode (desktop 0.7.0 / plugin 0.5.5)
+
+Right-click the companion and select **3D Character (Original Detail)**. Toggle it again to return to 2D; the choice is remembered. All 1,383,928 original vertices, textures and mesh topology are preserved without decimation. Assets live in `digital-human/3d/whale-full-v0.3/`; reduced v0.2 is no longer the current result.
+
+The 3D menu offers a full turn, walking in place and a tail swish. `whale_body` advertises `turn`, `walk` and `tail_swish` only when the connected desktop supports them, retaining ownership, visibility, expiry and receipt checks. 2D does not advertise these actions. 3D currently exposes idle, greeting, poke, headpat and the three new movements; the four older expressions have not passed 3D art review. Listening/thinking states drive head movements; output level drives a simple mouth morph. Blink and mouth controls remain drafts.
+
+Reopen an older running app to load the rebuilt binary. New Agent commands also require installing `releases/dsh-whale-voice-0.5.5.tgz` through the Harness plugin page. Building and offline rendering do not upgrade the live plugin or place calls. The original-detail model has been rendered with native SceneKit offline; walking has no foot IK yet, and hair/skirt collision or physics is not implemented.
+
+
+## Harness startup and visibility control (plugin 0.5.4, desktop 0.6.2/build 21)
+
+Entering Harness starts Whale Companion once. The button directly above **DS Bot** follows the actual desktop state: **Hide Whale Companion** hides the visible character, **Show Whale Companion** reveals it, and **Start Whale Companion** reopens an exited app. Both entries remain left-aligned. Hiding stops speech and ends a voice call; showing or starting never opens the microphone or places a call. State polling never revives a deliberately exited companion.
+
+Update both the companion and `dsh-whale-voice-0.5.4.tgz`; quit and reopen an older running companion once. A visibility change is confirmed only after the desktop reports it; failed communication prompts a retry. Older companions without hide support retain start/show behavior. The first upgrade from a plugin without a client component requires reopening Harness when current work permits, to refresh its missing-client cache.
+
+The launcher searches `~/Applications/Whale Companion.app`, `/Applications/Whale Companion.app`, the adjacent `desktop-preview/Whale Companion.app`, then `~/main/DeepSeek-Bot/digital-human/desktop-preview/Whale Companion.app`. Cordis plugin configuration accepts an absolute `companionPath` and `autoStart: false`. macOS only; remote Web clients control the Harness host. Autostart is once per plugin host lifecycle and does not install a login item. Only public sidebar and authenticated route APIs are used, with no Harness patches.
+
+
 ## Desktop voice calls (plugin 0.5.0, desktop 0.6.0)
 
 Double-click the character to start or end a voice call without opening a chat page. Harness must keep running in the background with this plugin, a chat model and the configured Voice Input recognizer ready. The desktop needs microphone permission, Doubao voice and Sound enabled. If a conversation is bound, the call uses it; otherwise the plugin creates and remembers a normal **Whale Voice Conversation** through the public Session controller. This is separate from the minimal reminder-delivery session. Busy or unavailable bound sessions fail explicitly.
@@ -10,7 +28,7 @@ A separate call badge follows the character at a readable size: blue **Connectin
 
 Use the menu's **Pause Voice Call** / **Resume Voice Call** for desktop calls. Double-click again or press the badge's red phone button to hang up. Hide, mute, sleep and session inactivity release the desktop microphone; device changes pause the call. Cancelled permissions, ASR results and old-call messages cannot restart capture or submit a late transcript. Hangup stops speech without cancelling the Agent's task. A disconnected backend times out locally; a missing desktop heartbeat releases its host lease. Existing DS Bot browser calls still work and share the single-call limit.
 
-See [desktop call notes and validation](../桌面直连语音通话说明.md). Installing these sources into a running Harness remains an explicit user action.
+See [desktop call notes and validation](../桌面直连语音通话说明.md). This working copy is not automatically copied to `repository/DS-whale` or installed into a running Harness.
 
 ## Hearing and digital body (plugin 0.4.4, desktop 0.5.4)
 
@@ -20,11 +38,11 @@ DS Bot voice calls label recognized input as ASR when preparing a reply. The Age
 
 `whale_body` with `action: "status"` reports current connectivity, availability, input provenance and actions advertised by the desktop. Supported actions are `greeting` (wave), `poke`, `headpat`, `shy`, `surprised`, `sad`, `sleepy` and `idle` (return to rest). Actions are silent and do not stop live TTS. A busy interaction is not replaced; the tool reports `busy`. Hidden, inactive, outdated or disconnected companions cannot execute new movements. Body control does not require a TTS key or Sound to be enabled.
 
-Commands expire after two seconds and require a matching desktop receipt. `accepted` confirms acceptance, not animation completion; timeout, cancellation and ownership changes remain unconfirmed. Future motions require updating both the desktop implementation/capability list and the plugin action registry/schema. No Harness source or user data is changed. Updating this repository does not automatically install into a running Harness.
+Commands expire after two seconds and require a matching desktop receipt. `accepted` confirms acceptance, not animation completion; timeout, cancellation and ownership changes remain unconfirmed. Future motions require updating both the desktop implementation/capability list and the plugin action registry/schema. No Harness source or user data is changed. This working tree is ahead of the separate `repository/DS-whale` publication copy; it is not automatically synchronized or installed.
 
 Install this directory through Harness **Plugins → Add plugin → Local directory**, then enable `dsh-whale-voice`. No Harness files are patched. From v0.2.3, new direct replies in the bound conversation are spoken without a prefix. In an unbound conversation, a direct user prompt beginning with `[whale]` opts that turn into speech. History, background schedules, Bot-to-Bot messages, reasoning and code blocks are not automatically read.
 
-With desktop v0.4.3, fill `doubao_api_key` in `desktop-preview/voice-config.local.json` once; the app reads it on launch. The local file is Git-ignored and owner-readable/writable only. **Reload Voice Config…** applies edits without restarting. **Connect Doubao Voice…** remains available for a temporary in-memory connection. No local voice service is needed. Choose **Test Voice (Uses API)** for a short billed sample; success displays `Doubao connected · streaming ready`. See [setup](../../README.md#build-and-setup). No credentials enter this Harness plugin.
+With desktop v0.4.3, fill `doubao_api_key` in `desktop-preview/voice-config.local.json` once; the app reads it on launch. The local file is Git-ignored and owner-readable/writable only. **Reload Voice Config…** applies edits without restarting. **Connect Doubao Voice…** remains available for a temporary in-memory connection. No local voice service is needed. Choose **Test Voice (Uses API)** for a short billed sample; success displays `Doubao connected · streaming ready`. See [setup](../豆包TTS接入说明.md). No credentials enter this Harness plugin.
 
 Example prompt:
 
@@ -62,7 +80,7 @@ Preferences, dedupe and functional unread text use public `storageDomain` in the
 Host integration check (mock session/schedule adapters, real public storage API):
 
 ```sh
-DSH_HARNESS=/absolute/path/to/deepseek-harness node --import /absolute/path/to/deepseek-harness/node_modules/tsx/dist/loader.mjs --import ./digital-human/harness-voice/test/harness-resolve.mjs digital-human/harness-voice/test/host.integration.mjs
+node --import ./deepseek-harness/node_modules/tsx/dist/loader.mjs --import ./digital-human/harness-voice/test/harness-resolve.mjs digital-human/harness-voice/test/host.integration.mjs
 ```
 
 The test resolver is not shipped or used at runtime.

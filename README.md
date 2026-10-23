@@ -6,6 +6,10 @@ A macOS desktop companion for DeepSeek Harness and DS Bot, with expressive chara
 
 ## Features
 
+- Full-detail 3D mode preserves all 1,383,928 vertices, with turning, waving, walking in place and tail motion; switch back to 2D anytime.
+- **◐ White Brightness** adjusts live and persists; the approved reference is **94%**, retaining the current blue hair and other saturated colors.
+
+- Start once when entering Harness, with a manual Start/Show button above DS Bot; closing stays closed until manually reopened.
 - Double-click to call a background Harness session without opening a chat page; native microphone capture, pause, resume and hangup.
 - A readable phone badge follows the character and distinguishes connecting, listening, recognition, thinking, speaking and paused states.
 - ASR-aware hearing and an Agent-owned digital body controlled through real gesture/expression tools.
@@ -32,6 +36,7 @@ Installing Whale alone does not add DS Bot's context-menu entry or replace DS Bo
 
 1. On macOS, install Apple's Command Line Tools and build the desktop app:
    ```sh
+   bash digital-human/3d/download-model.sh  # optional full-detail 3D model
    bash digital-human/desktop-preview/build.sh
    open 'digital-human/desktop-preview/Whale Companion.app'
    ```
@@ -43,7 +48,7 @@ The desktop runs on the Harness host. Desktop recognition uses the host's Voice 
 
 ## Versions and updates
 
-See [versions.json](versions.json), [CHANGELOG.md](CHANGELOG.md) and [中文更新说明](CHANGELOG.zh.md). Current source: desktop 0.6.0/build 19, Whale plugin 0.5.0. This repository establishes the source/version history; it does **not** implement automatic application updates. Future tagged GitHub Releases can carry plugin packages and desktop builds. Update plugins through Harness's plugin manager and rebuild/reopen the desktop when no call is active.
+See [versions.json](versions.json), [CHANGELOG.md](CHANGELOG.md) and [中文更新说明](CHANGELOG.zh.md). Current source: desktop 0.7.2/build 25, Whale plugin 0.5.5. This repository establishes the source/version history; it does **not** implement automatic application updates. The [v0.7.2 release](https://github.com/ssssssss-start/DS-whale/releases/tag/v0.7.2) carries the plugin package and full GLB/Blender models. Update plugins through Harness's plugin manager and rebuild/reopen the desktop when no call is active.
 
 ## Validation and limitations
 
@@ -52,6 +57,6 @@ node --test digital-human/harness-voice/test/*.test.mjs
 bash digital-human/desktop-preview/build.sh
 ```
 
-These checks use mock transports/audio and do not prove live microphone quality or paid API latency. Expressions can be selected manually or requested by the owning Agent through `whale_body`. Phoneme-level lip sync is not implemented. The tail now uses a separate rear layer with an anchored root and delayed tip rotation. Fixed legacy greeting/poke/head-pat recordings and the unofficial Mira web bridge are not distributed; gestures remain available without those recordings. Dynamic Doubao speech is independent of them.
+These checks use mock transports/audio and do not prove live microphone quality or paid API latency. 2D expressions can be selected manually or requested through `whale_body`; 3D advertises only its currently supported actions. Phoneme-level lip sync is not implemented. The 2D tail uses a separate rear layer; 3D uses a skeletal tail. Rigging, blink and mouth shapes remain drafts without foot IK or hair/skirt physics. Fixed legacy greeting/poke/head-pat recordings and the unofficial Mira web bridge are not distributed; gestures remain available without those recordings. Dynamic Doubao speech is independent of them.
 
 Only current runtime artwork is included. User data, real API configuration, logs, generated app bundles, old experiments and the third-party reference project are excluded. No redistribution license is declared yet; see [asset notes](digital-human/desktop-preview/assets/README.md).

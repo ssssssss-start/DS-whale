@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 
-export const bodyActions = ['idle', 'greeting', 'poke', 'headpat', 'shy', 'surprised', 'sad', 'sleepy']
+export const bodyActions = ['idle', 'greeting', 'poke', 'headpat', 'shy', 'surprised', 'sad', 'sleepy', 'turn', 'walk', 'tail_swish']
 
 export class Embodiment {
   constructor({ send, owner, call, clock = Date.now, timeout = 2000 }) {

@@ -1,18 +1,25 @@
 {
   "schema_version": 1,
   "desktop": {
-    "version": "0.6.0",
-    "build": 19,
-    "notes": "双击角色直连 Harness 会话；新增电话状态条、原生收音、数字身体控制和发丝边缘清理。"
+    "version": "0.7.2",
+    "build": 25,
+    "notes": "保留原版精度的 3D 形象与动作；修正渲染颜色，增加实时白色亮度调节，用户确认参考标准为 94%。"
   },
   "harness_plugin": {
     "name": "dsh-whale-voice",
-    "version": "0.5.0"
+    "version": "0.5.5"
   },
   "ds_bot_integration": {
     "base_commit": "6c25d5449582b7ae3aa323050e94400c76229443",
     "patch": "integrations/ds-bot/whale-integration.patch"
   },
   "harness_reference_commit": "5badb15009ae1756c3afe0ae0cef1faafc290ccc",
-  "automatic_updater": false
+  "automatic_updater": false,
+  "model": {
+    "version": "whale-full-v0.3",
+    "release_tag": "v0.7.2",
+    "sha256": "ba975c4e889be98c2419953a57df97fd026aae69de1db7f570fe4ce0b5570a64",
+    "vertices": 1383928,
+    "white_brightness_reference_percent": 94
+  }
 }

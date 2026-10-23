@@ -3,9 +3,11 @@ import Foundation
 final class BodyControl {
     var perform: ((Behavior) -> String)?
     var available: () -> Bool = { false }
+    var supported: () -> [String] = { Behavior.allCases.map(\.rawValue) }
+    var performExtended: ((String) -> String)?
     var now: () -> Double = { Date().timeIntervalSince1970 * 1000 }
     private var receipts: [(String, [String:Any])] = []
-    var actions: [String] { perform == nil ? [] : Behavior.allCases.map(\.rawValue) }
+    var actions: [String] { perform == nil ? [] : supported() }
 
     func receive(_ object: [String:Any]) -> [String:Any]? {
         guard object["type"] as? String == "body_action",
@@ -15,9 +17,10 @@ final class BodyControl {
         if let previous = receipts.first(where: { $0.0 == id }) { return previous.1 }
         let status: String
         if let deadline = object["expiresAt"] as? Double, deadline.isFinite, deadline > now(), deadline <= now() + 5000 {
-            if let behavior = Behavior(rawValue:action) {
+            if !actions.contains(action) { status = "unsupported" }
+            else if let behavior = Behavior(rawValue:action) {
                 status = available() ? perform?(behavior) ?? "unavailable" : "unavailable"
-            } else { status = "unsupported" }
+            } else { status = available() ? performExtended?(action) ?? "unsupported" : "unavailable" }
         } else { status = "expired" }
         let result: [String:Any] = ["type":"body_result", "id":id, "action":action, "status":status]
         receipts.append((id,result))
@@ -48,5 +51,13 @@ func runBodyControlChecks() {
     body.available = { true }; body.perform = { _ in "busy" }
     assert(body.receive(command("headpat"))?["status"] as? String == "busy")
     assert(movements.count == Behavior.allCases.count)
+    var extended = 0
+    body.supported = { ["idle","turn"] }; body.performExtended = { _ in extended += 1; return "accepted" }
+    let turn = command("turn")
+    assert(body.receive(turn)?["status"] as? String == "accepted")
+    assert(body.receive(turn)?["status"] as? String == "accepted" && extended == 1)
+    assert(body.receive(command("sad"))?["status"] as? String == "unsupported")
+    body.supported = { Behavior.allCases.map(\.rawValue) }
+    assert(body.receive(command("turn"))?["status"] as? String == "unsupported")
     print("Body control checks passed: supported actions, receipts, dedupe, expiry, hidden/inactive gate and busy state (mock scene).")
 }

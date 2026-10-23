@@ -18,3 +18,8 @@ __pycache__/
 previews/
 review/
 releases/
+
+# Full-resolution models are versioned as checksum-verified release assets
+*.glb
+*.blend
+*.blend1

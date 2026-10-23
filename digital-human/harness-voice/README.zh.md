@@ -1,5 +1,23 @@
 # 鲸鱼娘动态语音桥接
 
+## 原版精度 3D 模式（桌宠 0.7.0 / 插件 0.5.5）
+
+右键桌宠，选择 **3D Character (Original Detail)**。此选项可切回 2D，选择会保存。原版模型的 1,383,928 个顶点、贴图与网格拓扑全部保留；没有减面。模型位于 `digital-human/3d/whale-full-v0.3/`，轻量 v0.2 不再作为当前成果。
+
+3D 菜单提供转身、原地步行和摆尾。Agent 的 `whale_body` 根据桌宠实际能力提供 `turn`、`walk`、`tail_swish`，命令仍受会话归属、可见性、过期和回执约束。2D 不声明这些动作。3D 暂只声明 idle、greeting、poke、headpat 及这三个新增动作，旧四种表情尚未完成 3D 美术验收。通话的听／思考状态与头部动作关联；输出音量驱动简单口型，眨眼与口型仍为初稿。
+
+运行中的旧应用需重开一次才能加载新二进制；新增 Agent 动作还需要通过 Harness 插件页安装 `releases/dsh-whale-voice-0.5.5.tgz`。构建和离线预览不会升级正在运行的插件或发起通话。原版高精度模型已通过本机 SceneKit 离线渲染；步行尚无脚部 IK，头发与裙摆尚无碰撞/物理模拟。
+
+
+## Harness 启动与显示／隐藏入口（插件 0.5.4、桌宠 0.6.2/build 21）
+
+进入 Harness 后自动启动鲸鱼娘一次。左下角 **DS Bot 上方**的按钮按实际状态切换：「隐藏鲸鱼娘」隐藏当前形象，「显示鲸鱼娘」恢复隐藏的形象，应用退出后则显示「启动鲸鱼娘」。两个入口都保持靠左排列。隐藏会停止播报并结束通话；显示或启动不会自动开麦或拨号。退出后不会被状态轮询重新拉起，需点击按钮重开。
+
+同时更新桌宠和 `dsh-whale-voice-0.5.4.tgz`，运行中的旧桌宠需退出后重开一次。按钮等桌宠回传可见状态后才确认切换，通信失败会提示重试；旧桌宠不声明隐藏能力时，保留原来的启动／显示行为。首次从没有界面组件的旧插件升级，需在当前任务允许时重开 Harness，以刷新缺失客户端的缓存。
+
+默认依次查找 `~/Applications/Whale Companion.app`、`/Applications/Whale Companion.app`、源码相邻的 `desktop-preview/Whale Companion.app` 和 `~/main/DeepSeek-Bot/digital-human/desktop-preview/Whale Companion.app`。Cordis 插件配置可设置绝对路径 `companionPath` 或 `autoStart: false`。仅支持 macOS；远程 Web 按钮控制 Harness 所在电脑。自动启动按插件宿主生命周期计，不是系统登录启动项。只使用公开侧栏插槽与已认证路由，不修改 Harness。
+
+
 ## 桌面直连语音通话（插件 0.5.0、桌宠 0.6.0）
 
 双击鲸鱼娘即可开始或结束语音通话，无需打开聊天页面。Harness 需在后台运行，启用本插件，并配置好聊天模型及已准备完成的 Voice Input 识别器；桌宠需要麦克风权限、豆包语音和开启 Sound。有绑定时使用绑定会话；未绑定时通过公开 Session controller 创建并记住普通的 **Whale Voice Conversation**，与最小权限的提醒投递会话分开。绑定会话忙碌或不可用时明确失败。
@@ -10,7 +28,7 @@
 
 桌面通话可在菜单 **Pause Voice Call** / **Resume Voice Call** 暂停与恢复，再次双击或点击红色电话挂断。隐藏、静音、休眠或会话不活跃会释放麦克风，输入设备变更会暂停。迟到的权限结果、ASR 结果和旧通话状态不会重新开麦或发送识别文字；挂断不取消 Agent 任务。后端断开会本地超时停止，桌宠心跳丢失也会释放宿主租约。原有 DS Bot 浏览器通话仍可使用，与桌面通话共享单通话限制。
 
-详见[桌面通话说明与验证](../桌面直连语音通话说明.md)。更新本仓库不会自动安装进运行中的 Harness。
+详见[桌面通话说明与验证](../桌面直连语音通话说明.md)。当前工作副本不会自动同步到 `repository/DS-whale`，也不会自动安装进运行中的 Harness。
 
 ## 听觉与数字身体（插件 0.4.4、桌宠 0.5.4）
 
@@ -20,11 +38,11 @@ DS Bot 通话在提交识别结果前标明 ASR 输入，Agent 可以自然地�
 
 `whale_body` 的 `action: "status"` 返回实时连接、可用状态、输入来源和桌宠声明支持的动作。目前包含 `greeting`（挥手）、`poke`、`headpat`、`shy`、`surprised`、`sad`、`sleepy` 和 `idle`（恢复待机）。Agent 动作不播放固定台词，也不打断动态回复。已有互动未结束时返回 `busy`，不替换用户互动；桌宠隐藏、设备不活跃、版本不支持或断开时不能执行新动作。动作控制不要求 TTS Key，也不要求开启 Sound。
 
-命令两秒后过期，必须收到匹配的桌宠回执。`accepted` 只表示动作已被接受，不保证动画已完成；超时、取消和控制权变更不算成功。未来增加动作，需要同步补充桌宠实现/能力列表和插件动作注册/工具参数。本实现不修改 Harness 或用户数据。更新本仓库不会自动安装到正在运行的 Harness。
+命令两秒后过期，必须收到匹配的桌宠回执。`accepted` 只表示动作已被接受，不保证动画已完成；超时、取消和控制权变更不算成功。未来增加动作，需要同步补充桌宠实现/能力列表和插件动作注册/工具参数。本实现不修改 Harness 或用户数据。当前工作目录领先于独立 `repository/DS-whale` 发布副本，不会自动同步或安装。
 
 在 Harness 的「插件 → 添加插件」中安装本目录，然后启用 `dsh-whale-voice`。通过公开 `session/event` 和 `agent/assistant-stream` 插件事件接入，无需修改 Harness。
 
-桌宠 v0.4.3 可在 `desktop-preview/voice-config.local.json` 的 `doubao_api_key` 中填一次 Key，启动时自动读取；文件已加入 Git 忽略，仅当前用户读写。修改后点 **Reload Voice Config…** 即刻加载，无需重启。**Connect Doubao Voice…** 仍可临时连接，只在内存保留本次输入。无需启动本地语音服务。选择 **Test Voice (Uses API)** 试听一条由 API 账户计费的短句；成功后显示 `Doubao connected · streaming ready`。见 [接入说明](../../README.zh.md#构建与使用)。凭证不进入 Harness 插件。
+桌宠 v0.4.3 可在 `desktop-preview/voice-config.local.json` 的 `doubao_api_key` 中填一次 Key，启动时自动读取；文件已加入 Git 忽略，仅当前用户读写。修改后点 **Reload Voice Config…** 即刻加载，无需重启。**Connect Doubao Voice…** 仍可临时连接，只在内存保留本次输入。无需启动本地语音服务。选择 **Test Voice (Uses API)** 试听一条由 API 账户计费的短句；成功后显示 `Doubao connected · streaming ready`。见 [接入说明](../豆包TTS接入说明.md)。凭证不进入 Harness 插件。
 
 在 Harness 里发送以下格式的消息即可发声：
 
@@ -64,7 +82,7 @@ python3 digital-human/harness-voice/report.py --out digital-human/harness-voice/
 宿主集成检查（模拟会话/调度适配器，使用真实公开存储 API）：
 
 ```sh
-DSH_HARNESS=/absolute/path/to/deepseek-harness node --import /absolute/path/to/deepseek-harness/node_modules/tsx/dist/loader.mjs --import ./digital-human/harness-voice/test/harness-resolve.mjs digital-human/harness-voice/test/host.integration.mjs
+node --import ./deepseek-harness/node_modules/tsx/dist/loader.mjs --import ./digital-human/harness-voice/test/harness-resolve.mjs digital-human/harness-voice/test/host.integration.mjs
 ```
 
 测试解析器不发布，也不作为运行时依赖。

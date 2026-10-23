@@ -11,6 +11,34 @@ final class CharacterScene: SKScene {
     private let waveMotion: WaveMotion
     private let emotions = EmotionFrames()
     private let rig = SKNode()
+    private(set) var whale3D: Whale3D?
+    private(set) var uses3D = false
+    var supportedBodyActions: [String] {
+        uses3D ? ["idle","greeting","poke","headpat","turn","walk","tail_swish"] : Behavior.allCases.map(\.rawValue)
+    }
+    func set3D(_ enabled: Bool) throws {
+        if enabled && whale3D == nil {
+            guard let url = Bundle.main.url(forResource:"whale-full-v0.3",withExtension:"glb") else {
+                throw WhaleGLB.LoadError.invalid("The 3D model is not bundled. Rebuild the app with the full model.")
+            }
+            let model = try Whale3D(url:url)
+            model.setWhiteBrightness(WhiteBrightnessSettings.current)
+            whale3D = model; addChild(model.node)
+        }
+        uses3D = enabled; rig.isHidden = enabled; whale3D?.node.isHidden = !enabled
+        whale3D?.node.isPlaying = enabled && !isPaused
+        layoutArt()
+    }
+    func perform3DAction(_ name: String) -> String {
+        guard uses3D, !isPaused, let whale3D else { return "unavailable" }
+        let clips = ["turn":"Turn_360","walk":"Walk_In_Place","tail_swish":"Tail_Swish"]
+        guard let clip = clips[name] else { return "unsupported" }
+        let now = previewTime ?? ProcessInfo.processInfo.systemUptime
+        guard interaction.behavior == .idle else { return "busy" }
+        guard whale3D.previewClip == nil || now-whale3D.previewStarted >= 8 else { return "busy" }
+        whale3D.previewClip = clip; whale3D.previewStarted = now
+        return "accepted"
+    }
     private let tailRig: TailRig
     private var nextBlink: TimeInterval = 0
     private var blinkStarted: TimeInterval?
@@ -73,6 +101,7 @@ final class CharacterScene: SKScene {
     required init?(coder: NSCoder) { fatalError() }
     override func didChangeSize(_ oldSize: CGSize) { layoutArt() }
     private func layoutArt() {
+        whale3D?.layout(size)
         let room = CGRect(x: 9, y: 10, width: max(1, size.width - 18), height: max(1, size.height - 26))
         let factor = min(room.width / base.size().width, room.height / base.size().height)
         character.size = base.size()
@@ -98,11 +127,14 @@ final class CharacterScene: SKScene {
         playNewInteraction(at:now)
     }
     func performBodyAction(_ behavior: Behavior) -> String {
+        guard supportedBodyActions.contains(behavior.rawValue) else { return "unsupported" }
         guard !isPaused else { return "unavailable" }
         let now = previewTime ?? ProcessInfo.processInfo.systemUptime
+        if uses3D, behavior != .idle, let whale3D, whale3D.previewClip != nil, now-whale3D.previewStarted < 8 { return "busy" }
         interaction.advance(to:now)
         guard interaction.behavior == .idle || interaction.serial == silentSerial else { return "busy" }
         if behavior == .idle {
+            whale3D?.previewClip = nil
             headpatHeld = false; feedback.stop(); interaction.interrupt(at:now)
             return "accepted"
         }
@@ -127,6 +159,7 @@ final class CharacterScene: SKScene {
         interaction.interrupt(at:previewTime ?? ProcessInfo.processInfo.systemUptime)
     }
     func suspend() {
+        whale3D?.node.isPlaying = false; whale3D?.previewClip = nil
         feedback.stop()
         headpatHeld = false
         interaction.reset()
@@ -135,6 +168,7 @@ final class CharacterScene: SKScene {
     }
     func resume() {
         isPaused = false
+        whale3D?.node.isPlaying = uses3D
         nextBlink = 0
     }
     override func update(_ currentTime: TimeInterval) {
@@ -146,6 +180,10 @@ final class CharacterScene: SKScene {
         let behavior = interaction.behavior
         let elapsed = interaction.elapsed(at: time)
         let envelope = interaction.envelope(at: time)
+        if uses3D {
+            whale3D?.update(time:time,behavior:behavior,elapsed:elapsed,phase:callPhase,speaking:speakingLevel,idleMotion:idleMotion)
+            return
+        }
         if nextBlink == 0 { nextBlink = time + 8.0 }
         if behavior != .idle { nextBlink = time + 12.0 }
         if behavior == .idle && time >= nextBlink {

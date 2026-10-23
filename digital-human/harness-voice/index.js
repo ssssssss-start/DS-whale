@@ -6,6 +6,7 @@ import { VoiceCalls } from './calls.js'
 import { Embodiment } from './embodiment.js'
 import { NativeCall } from './native-call.js'
 import { randomUUID } from 'node:crypto'
+import { CompanionLauncher } from './launcher.js'
 export { socketPath } from './transport.js'
 
 export const name = 'whale-voice'
@@ -87,7 +88,7 @@ export function createBridge(send, clock = Date.now, canRead = () => false, call
   return handle
 }
 
-export function apply(ctx) {
+export function apply(ctx, config = {}) {
   let host, disposed = false, chain = Promise.resolve(), hostStatus = 'Waiting for public storage/tools/session services'
   const serialize = work => {
     const result = chain.then(() => { if (disposed) throw new Error('Plugin stopped'); return work() })
@@ -98,11 +99,14 @@ export function apply(ctx) {
   const transport = connectDesktop(message => {
     calls.receive(message)
     body.receive(message)
+    launcher.receive(message)
     if (message.type === 'native_call') void native.receive(message).catch(() => native.fail())
     if (message.type === 'desktop_state') enqueue(async () => { transport.send({type:'host_status',text:hostStatus}); await host?.engine.updateDesktop(message) })
     if (message.type === 'control') enqueue(async () => { await host?.engine.control(message); bridge.syncBinding(calls.sessionId ?? host?.engine.state.settings.followedSession) })
     if (message.type === 'ack') enqueue(() => host?.engine.ack(message))
   })
+  const launcher = new CompanionLauncher({send:command => transport.send(command),
+    appPath:typeof config.companionPath === 'string' ? config.companionPath : '', autoStart:config.autoStart !== false})
   const calls = new VoiceCalls({send:command => transport.send(command),cancel:id => bridge.cancelSession(id)})
   const native = new NativeCall({ calls, send:command => transport.send(command),
     target:() => { if (!host) throw new Error('Plugin not ready'); return host.nativeTarget() },
@@ -153,9 +157,10 @@ export function apply(ctx) {
       read: () => serialize(() => ready().engine.binding()),
       bind: args => serialize(async () => { const result = await ready().bindSession(args); bridge.syncBinding(calls.sessionId ?? result.sessionId); return result }),
       call: body => calls.handle(body, id => findSession(ready().controller,id)),
+      desktop: action => action === 'desktop_state' ? launcher.state() : action === 'desktop_toggle' ? launcher.toggle() : launcher.launch(action === 'desktop_autostart'),
     })), 'whale conversation binding route')
   })
   const timer = setInterval(() => { calls.tick(); native.tick(); enqueue(() => host?.engine.tick()) }, 1000)
   timer.unref?.()
-  ctx.effect(() => () => { disposed = true; clearInterval(timer); native.close(); calls.end(); body.close(); bridge.close(); transport.close() }, 'whale voice lifecycle')
+  ctx.effect(() => () => { disposed = true; clearInterval(timer); launcher.close(); native.close(); calls.end(); body.close(); bridge.close(); transport.close() }, 'whale voice lifecycle')
 }

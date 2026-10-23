@@ -10,6 +10,12 @@ trap 'rm -rf "$build_dir"' EXIT
 swiftc -module-cache-path "${TMPDIR:-/tmp}/whale-swift-cache" "$project_dir"/*.swift -o "$build_dir/WhaleCompanion"
 "$build_dir/WhaleCompanion" --self-test
 cp "$project_dir/Info.plist" "$app_dir/Info.plist"
+model_path="$project_dir/../3d/whale-full-v0.3/whale-full-v0.3.glb"
+if [ -f "$model_path" ]; then
+    cp "$model_path" "$app_dir/Resources/whale-full-v0.3.glb"
+else
+    echo "3D model is optional: run digital-human/3d/download-model.sh to enable 3D."
+fi
 cp "$project_dir/assets/wave-reference-full.png" "$app_dir/Resources/wave-reference-full.png"
 if [ -d "$project_dir/assets/wave-tweens" ]; then
     mkdir -p "$app_dir/Resources/wave-tweens"

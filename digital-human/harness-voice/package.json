@@ -1,11 +1,12 @@
 {
   "name": "dsh-whale-voice",
-  "version": "0.5.0",
+  "version": "0.5.5",
   "type": "module",
   "description": "Opt-in sentence voice bridge for the Whale desktop companion",
   "main": "index.js",
   "exports": {
-    ".": "./index.js"
+    ".": "./index.js",
+    "./client": "./client.js"
   },
   "files": [
     "index.js",
@@ -20,12 +21,21 @@
     "binding.js",
     "calls.js",
     "embodiment.js",
-    "native-call.js"
+    "native-call.js",
+    "launcher.js",
+    "client.js",
+    "src/client/",
+    "scripts/build-client.mjs"
   ],
   "scripts": {
+    "build": "node scripts/build-client.mjs",
+    "check:client": "node scripts/build-client.mjs --check",
     "test": "node --test test/*.test.mjs"
   },
   "dsh": {
+    "client": {
+      "platform": "web"
+    },
     "bundle": {
       "patch": "./cordis.patch.yml"
     }
@@ -36,5 +46,8 @@
   },
   "dependencies": {
     "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
   }
 }

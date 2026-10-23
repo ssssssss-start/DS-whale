@@ -35,7 +35,7 @@ export async function installHost(ctx, send, body) {
     if (!engine.state.settings.followedSession || exec.agent?.session?.id !== engine.state.settings.followedSession) throw new Error('Select this session using Follow Next Conversation in the Whale menu first')
   }
   const disposers = []
-  if (body) disposers.push(register({ name:'whale_body', description:'Sense and move your Whale Companion digital body. Use status to inspect connection, hearing input and supported actions. greeting waves hello; poke and headpat perform their reactions; shy, surprised, sad and sleepy show expressions; idle returns to rest. Only the bound session or current Whale call owns this body. Actions are silent; wait for the desktop receipt before describing a movement as accepted. An accepted command does not prove animation completion.',
+  if (body) disposers.push(register({ name:'whale_body', description:'Sense and move your Whale Companion digital body. Use status to inspect connection, hearing input and supported actions. greeting waves hello; poke and headpat perform their reactions; shy, surprised, sad and sleepy show expressions; idle returns to rest. A connected 3D body may also offer turn (one full turn), walk (in place) and tail_swish. Check status before choosing an action. Only the bound session or current Whale call owns this body. Actions are silent; wait for the desktop receipt before describing a movement as accepted. An accepted command does not prove animation completion.',
     parameters:{ action:{type:'string',required:true,enum:['status',...bodyActions]} },
     async execute(args,exec) { return JSON.stringify(await body.execute(args.action,exec.agent?.session?.id,exec.signal)) },
   }))

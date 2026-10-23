@@ -1,0 +1,17 @@
+{
+  "release": "v0.7.2",
+  "assets": [
+    {
+      "name": "whale-full-v0.3.glb",
+      "bytes": 121285520,
+      "sha256": "ba975c4e889be98c2419953a57df97fd026aae69de1db7f570fe4ce0b5570a64",
+      "url": "https://github.com/ssssssss-start/DS-whale/releases/download/v0.7.2/whale-full-v0.3.glb"
+    },
+    {
+      "name": "whale-full-v0.3.blend",
+      "bytes": 195557716,
+      "sha256": "a7d89dd20b444f5d396fb8105ac8e06fb7cd5b3b1430638d710e78aaed2acc28",
+      "url": "https://github.com/ssssssss-start/DS-whale/releases/download/v0.7.2/whale-full-v0.3.blend"
+    }
+  ]
+}

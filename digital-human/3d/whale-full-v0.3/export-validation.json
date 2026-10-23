@@ -1,0 +1,16 @@
+{
+  "meshes": 14,
+  "nodes": 31,
+  "skins": 1,
+  "animations": 7,
+  "clips": [
+    "Idle",
+    "Turn_360",
+    "Wave",
+    "Walk_In_Place",
+    "Listening",
+    "Thinking",
+    "Tail_Swish"
+  ],
+  "bytes": 121285520
+}

@@ -12,6 +12,19 @@ function fixture(timeout = 100) {
   return { body, sent, desktop, advance: ms => { now += ms }, owner: value => { owner = value }, call: value => { call = value } }
 }
 
+test('3D movements follow desktop capabilities and remain unavailable in 2D', async () => {
+  const f = fixture()
+  f.desktop({ bodyActions:['idle','greeting'] })
+  await assert.rejects(f.body.execute('turn','chosen'), /not supported/)
+  f.desktop({ bodyActions:['idle','turn','walk','tail_swish'] })
+  for (const action of ['turn','walk','tail_swish']) {
+    const result = f.body.execute(action,'chosen')
+    f.body.receive({ ...f.sent.at(-1), type:'body_result', status:'accepted' })
+    assert.equal((await result).status,'accepted')
+  }
+  await assert.rejects(f.body.execute('sad','chosen'), /not supported/)
+})
+
 test('body context belongs only to the selected session and distinguishes ASR from typed/unknown input', () => {
   const f = fixture()
   assert.equal(f.body.prompt('other'), '')

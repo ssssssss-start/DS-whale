@@ -1,0 +1,100 @@
+[
+  {
+    "part": "root.0",
+    "vertices": 357146,
+    "same_topology_counts": true,
+    "max_position_error": 0.0,
+    "same_materials": true
+  },
+  {
+    "part": "root.2",
+    "vertices": 326277,
+    "same_topology_counts": true,
+    "max_position_error": 0.0,
+    "same_materials": true
+  },
+  {
+    "part": "root.3",
+    "vertices": 194068,
+    "same_topology_counts": true,
+    "max_position_error": 0.0,
+    "same_materials": true
+  },
+  {
+    "part": "root.1.0.0",
+    "vertices": 65623,
+    "same_topology_counts": true,
+    "max_position_error": 0.0,
+    "same_materials": true
+  },
+  {
+    "part": "root.1.0.1",
+    "vertices": 21091,
+    "same_topology_counts": true,
+    "max_position_error": 0.0,
+    "same_materials": true
+  },
+  {
+    "part": "root.1.0.2",
+    "vertices": 22616,
+    "same_topology_counts": true,
+    "max_position_error": 0.0,
+    "same_materials": true
+  },
+  {
+    "part": "root.1.0.3",
+    "vertices": 9667,
+    "same_topology_counts": true,
+    "max_position_error": 0.0,
+    "same_materials": true
+  },
+  {
+    "part": "root.1.0.4",
+    "vertices": 4033,
+    "same_topology_counts": true,
+    "max_position_error": 0.0,
+    "same_materials": true
+  },
+  {
+    "part": "root.1.1",
+    "vertices": 80254,
+    "same_topology_counts": true,
+    "max_position_error": 0.0,
+    "same_materials": true
+  },
+  {
+    "part": "root.1.2",
+    "vertices": 79209,
+    "same_topology_counts": true,
+    "max_position_error": 0.0,
+    "same_materials": true
+  },
+  {
+    "part": "root.1.3",
+    "vertices": 102768,
+    "same_topology_counts": true,
+    "max_position_error": 0.0,
+    "same_materials": true
+  },
+  {
+    "part": "root.1.4",
+    "vertices": 45813,
+    "same_topology_counts": true,
+    "max_position_error": 0.0,
+    "same_materials": true
+  },
+  {
+    "part": "root.1.5",
+    "vertices": 46455,
+    "same_topology_counts": true,
+    "max_position_error": 0.0,
+    "same_materials": true
+  },
+  {
+    "part": "root.1.6",
+    "vertices": 28908,
+    "same_topology_counts": true,
+    "max_position_error": 0.0,
+    "same_materials": true
+  }
+]

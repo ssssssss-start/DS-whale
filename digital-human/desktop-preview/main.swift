@@ -60,7 +60,7 @@ final class CharacterView: SKView {
     deinit { longPress?.invalidate() }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuDelegate, NSMenuItemValidation {
     var window: NSPanel!
     var statusItem: NSStatusItem!
     var characterScene: CharacterScene!
@@ -82,6 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     var workspaceObservers: [NSObjectProtocol] = []
     var soundItem: NSMenuItem!
     var motionItem: NSMenuItem!
+    var brightnessPanel: WhiteBrightnessPanel?
     var scale: CGFloat = 1
     let baseSize = NSSize(width: 190, height: 234)
 
@@ -134,6 +135,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             return self.settings.visible && self.settings.active && !self.characterScene.isPaused
         }
         voice.body.perform = { [weak self] behavior in self?.characterScene.performBodyAction(behavior) ?? "unavailable" }
+        voice.body.supported = { [weak self] in self?.characterScene.supportedBodyActions ?? [] }
+        voice.body.performExtended = { [weak self] in self?.characterScene.perform3DAction($0) ?? "unavailable" }
         voice.onStart = { [weak self] in self?.characterScene.beginSpeaking() }
         voice.onStatus = { [weak self] status in self?.voiceStatusItem?.title = status }
         voice.onTestFailure = { message in
@@ -146,9 +149,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         voice.muted = characterScene.feedback.muted
         voice.selectVoice(UserDefaults.standard.string(forKey:"doubaoVoiceID") ?? DoubaoVoice.defaultID)
         buildMenu()
+        if UserDefaults.standard.bool(forKey:"use3DCharacter") {
+            do { try characterScene.set3D(true) }
+            catch { NSLog("3D character could not be loaded: %@",String(describing:error)) }
+        }
         reloadVoiceConfig(showResult:false)
         setupProactive()
         setupNativeCall(in:view)
+        voice.onShowCompanion = { [weak self] in self?.showWhale() }
+        voice.onHideCompanion = { [weak self] in self?.hideWhale() }
         voice.start()
         view.menu = actions
         window.contentView = view
@@ -171,6 +180,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         more.action = #selector(openActions(_:))
         more.autoresizingMask = [.minXMargin, .minYMargin]
         view.addSubview(more)
+        let brightness = NSButton(frame:NSRect(x:frame.width - 72,y:frame.height - 25,width:22,height:22))
+        brightness.title = "◐"; brightness.isBordered = false
+        brightness.font = .systemFont(ofSize:16)
+        brightness.toolTip = "White brightness"
+        brightness.setAccessibilityLabel("White brightness")
+        brightness.target = self; brightness.action = #selector(showWhiteBrightness)
+        brightness.autoresizingMask = [.minXMargin,.minYMargin]
+        view.addSubview(brightness)
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.title = "Whale"
         statusItem.menu = actions
@@ -209,6 +226,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         actions.addItem(withTitle: "Say Hello", action: #selector(sayHello), keyEquivalent: "")
         actions.addItem(withTitle: "Poke", action: #selector(poke), keyEquivalent: "")
         actions.addItem(withTitle: "Head Pat", action: #selector(headPat), keyEquivalent: "")
+        actions.addItem(withTitle:"3D Character (Original Detail)",action:#selector(toggle3DCharacter),keyEquivalent:"")
+        actions.addItem(withTitle:"White Brightness…",action:#selector(showWhiteBrightness),keyEquivalent:"")
+        for (title,name) in [("Turn Around","turn"),("Walk in Place","walk"),("Swish Tail","tail_swish")] {
+            let item = actions.addItem(withTitle:title,action:#selector(perform3DMenu(_:)),keyEquivalent:"")
+            item.representedObject = name
+        }
         let expressions = NSMenu(title:"Expressions")
         for behavior in Behavior.emotions {
             let item = expressions.addItem(withTitle:behavior.title,action:#selector(showExpression(_:)),keyEquivalent:"")
@@ -230,12 +253,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         actions.addItem(withTitle: "Quit", action: #selector(quit), keyEquivalent: "q")
         for item in actions.items { item.target = self }
     }
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showWhale(); return false
+    }
     func menuWillOpen(_ menu: NSMenu) {
         updateProactiveMenu()
         soundItem.state = characterScene.feedback.muted ? .off : .on
         motionItem.state = characterScene.idleMotion ? .on : .off
+        for item in menu.items {
+            if item.action == #selector(toggle3DCharacter) { item.state = characterScene.uses3D ? .on : .off }
+            if item.action == #selector(perform3DMenu(_:)) { item.isEnabled = characterScene.uses3D }
+        }
         for item in menu.items where item.tag > 0 { item.state = abs(CGFloat(item.tag) / 100 - scale) < 0.01 ? .on : .off }
         for item in voiceChoices.items { item.state = item.representedObject as? String == voice.selectedVoice ? .on : .off }
+    }
+    func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        if item.action == #selector(perform3DMenu(_:)) { return characterScene.uses3D }
+        if item.action == #selector(showExpression(_:)) { return !characterScene.uses3D }
+        return true
     }
     func resize(to requested: CGFloat) {
         scale = min(2, max(0.5, requested))
@@ -283,6 +318,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
     @objc func stopSpeaking() { voice.stopAll() }
     @objc func sayHello() { characterScene.request(.greeting) }
+    @objc func toggle3DCharacter() {
+        do {
+            try characterScene.set3D(!characterScene.uses3D)
+            UserDefaults.standard.set(characterScene.uses3D,forKey:"use3DCharacter")
+        } catch {
+            let alert = NSAlert(); alert.messageText = "3D Character Unavailable"
+            alert.informativeText = String(describing:error); alert.runModal()
+        }
+    }
+    @objc func perform3DMenu(_ sender: NSMenuItem) {
+        guard let name = sender.representedObject as? String else { return }
+        _ = characterScene.perform3DAction(name)
+    }
     @objc func poke() { characterScene.request(.poke) }
     @objc func headPat() { characterScene.request(.headpat) }
     @objc func showExpression(_ sender: NSMenuItem) {
@@ -318,6 +366,14 @@ if CommandLine.arguments.contains("--self-test") {
     runVoiceStreamChecks()
     runVoiceConfigChecks()
     runDoubaoChecks()
+} else if let index = CommandLine.arguments.firstIndex(of:"--export-3d-composite"), CommandLine.arguments.count > index+2 {
+    _ = NSApplication.shared
+    do { try exportWhale3DComposite(modelURL:URL(fileURLWithPath:CommandLine.arguments[index+1]),output:URL(fileURLWithPath:CommandLine.arguments[index+2])) }
+    catch { print("Lighting preview failed: \(error)"); exit(1) }
+} else if let index = CommandLine.arguments.firstIndex(of:"--export-3d"), CommandLine.arguments.count > index+2 {
+    _ = NSApplication.shared
+    do { try exportWhale3DPreview(modelURL:URL(fileURLWithPath:CommandLine.arguments[index+1]),output:URL(fileURLWithPath:CommandLine.arguments[index+2])) }
+    catch { print("3D preview failed: \(error)"); exit(1) }
 } else if let index = CommandLine.arguments.firstIndex(of:"--export-call-status"), CommandLine.arguments.count > index+1 {
     do { try exportCallStatusPreview(to:URL(fileURLWithPath:CommandLine.arguments[index+1])) }
     catch { print("Call status preview export failed"); exit(1) }

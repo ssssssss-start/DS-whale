@@ -1,5 +1,35 @@
 # Whale desktop preview
 
+## Live white brightness (0.7.2 / build 25)
+
+In 3D mode, click **◐** beside the actions button (or **White Brightness…** in the menu). Drag the 50–100% slider to reduce bright, low-saturation whites while keeping saturated colors such as blue hair unchanged. Similar white highlights elsewhere are also affected; this is a color-based adjustment, not a fabric-only mask. Changes appear immediately and persist across restarts and 2D/3D switches. **Use as Reference** saves your preferred value; **Restore Reference** returns to it. The user-approved reference is **94%** (2026-10-23), also the default for new settings; saved adjustments take priority.
+
+## 3D color correction (0.7.1 / build 24)
+
+The desktop now preserves shading painted into the original color map, removes the extra metallic highlight pass, and corrects color output along the SK3DNode compositing path. Model/texture files, rig and motions retain their original detail. Reopen the companion to apply this desktop-only update; no Harness plugin update is needed.
+
+Exposure adaptation is disabled so the live character keeps the reference brightness, with a small +0.03 EV lift that preserves the white fabric detail.
+
+Use `--export-3d-composite <model.glb> <output-directory>` to validate color through the actual SK3DNode → SpriteKit path, covering light/dark backgrounds, front/side/back and waving. A standalone SceneKit render does not validate the desktop appearance.
+
+
+## Full-detail 3D mode (desktop 0.7.0 / plugin 0.5.5)
+
+Right-click the companion and select **3D Character (Original Detail)**. Toggle it again to return to 2D; the choice is remembered. All 1,383,928 original vertices, textures and mesh topology are preserved without decimation. Assets live in `digital-human/3d/whale-full-v0.3/`; reduced v0.2 is no longer the current result.
+
+The 3D menu offers a full turn, walking in place and a tail swish. `whale_body` advertises `turn`, `walk` and `tail_swish` only when the connected desktop supports them, retaining ownership, visibility, expiry and receipt checks. 2D does not advertise these actions. 3D currently exposes idle, greeting, poke, headpat and the three new movements; the four older expressions have not passed 3D art review. Listening/thinking states drive head movements; output level drives a simple mouth morph. Blink and mouth controls remain drafts.
+
+Reopen an older running app to load the rebuilt binary. New Agent commands also require installing `releases/dsh-whale-voice-0.5.5.tgz` through the Harness plugin page. Building and offline rendering do not upgrade the live plugin or place calls. The original-detail model has been rendered with native SceneKit offline; walking has no foot IK yet, and hair/skirt collision or physics is not implemented.
+
+
+## Harness startup and visibility control (plugin 0.5.4, desktop 0.6.2/build 21)
+
+Entering Harness starts Whale Companion once. The button directly above **DS Bot** follows the actual desktop state: **Hide Whale Companion** hides the visible character, **Show Whale Companion** reveals it, and **Start Whale Companion** reopens an exited app. Both entries remain left-aligned. Hiding stops speech and ends a voice call; showing or starting never opens the microphone or places a call. State polling never revives a deliberately exited companion.
+
+Update both the companion and `dsh-whale-voice-0.5.4.tgz`; quit and reopen an older running companion once. A visibility change is confirmed only after the desktop reports it; failed communication prompts a retry. Older companions without hide support retain start/show behavior. The first upgrade from a plugin without a client component requires reopening Harness when current work permits, to refresh its missing-client cache.
+
+The launcher searches `~/Applications/Whale Companion.app`, `/Applications/Whale Companion.app`, the adjacent `desktop-preview/Whale Companion.app`, then `~/main/DeepSeek-Bot/digital-human/desktop-preview/Whale Companion.app`. Cordis plugin configuration accepts an absolute `companionPath` and `autoStart: false`. macOS only; remote Web clients control the Harness host. Autostart is once per plugin host lifecycle and does not install a login item. Only public sidebar and authenticated route APIs are used, with no Harness patches.
+
 Desktop **0.6.0/build 19** supports direct voice calls: double-click the character to call, double-click again or use the red phone button to hang up. The readable call badge follows the character and distinguishes connecting, listening, recognition, thinking, speaking and paused states. No chat page is needed; Harness and plugin **0.5.0** must run in the background with a prepared Voice Input recognizer and chat model. Configure Doubao, enable Sound and grant microphone permission. An existing binding is used, or a normal Harness voice session is created and reused. See [direct desktop calls](../harness-voice/README.md#desktop-voice-calls-plugin-050-desktop-060).
 
 Desktop 0.5.4/build 18 adds Agent body control through the same-user voice socket. With voice plugin 0.4.4, only the bound session or current Whale call controls the character. All existing gestures/expressions and return-to-idle are exposed by `whale_body`; movement requests are silent, expire after two seconds and return acceptance/busy/unavailable receipts. They do not stop TTS or replace an active user interaction. Hidden or inactive desktops reject new movements. Hearing/body context and setup are documented in [the voice plugin](../harness-voice/README.md#hearing-and-digital-body-plugin-044-desktop-054). Rebuild and reopen the app to activate the native changes; building alone does not restart a running companion.
@@ -36,9 +66,9 @@ Desktop v0.4.4 keeps the existing open-eye smile and closed-eye smile. Head pats
 
 In v0.4.4, eye transitions reused the existing 0→1→2 interpolated textures within two eye masks, excluding the mouth. That replaced the old face-opacity dissolve, but the masks still clipped the brows. The next version below replaces those masks.
 
-Version 0.4.5 supersedes the eye masks with one feathered full-face region whose boundary lies in the hair, outside the eyebrow/eyelid outlines. The same source frame supplies the eyes and mouth, avoiding clipped brows and rectangular remnants. The arm lift now takes 1.6 s, followed by another 0.8 s to reach the high smiling pose; lowering takes 1.25 s. The whole greeting lasts at least 8.1 s. Three complete-character intermediate poses were made with the built-in imagegen tool, then offline Apple Vision flow with palm position guidance produced 97 RGBA lift frames. Runtime uses only the prebuilt images. Source sheet, exact prompts and provenance are in [asset notes](assets/README.md); legacy originals remain unchanged. Frame interpolation may still soften finger detail.
+Version 0.4.5 supersedes the eye masks with one feathered full-face region whose boundary lies in the hair, outside the eyebrow/eyelid outlines. The same source frame supplies the eyes and mouth, avoiding clipped brows and rectangular remnants. The arm lift now takes 1.6 s, followed by another 0.8 s to reach the high smiling pose; lowering takes 1.25 s. The whole greeting lasts at least 8.1 s. Three complete-character intermediate poses were made with the built-in imagegen tool, then offline Apple Vision flow with palm position guidance produced 97 RGBA lift frames. Runtime uses only the prebuilt images. Source sheet, exact prompts and provenance are in [assets/lift-v3](assets/lift-v3/PROVENANCE.md); legacy originals remain unchanged. Frame interpolation may still soften finger detail.
 
-Version 0.4.6 fixes lateral sliding in those new poses. The builder now derives placement from the original artwork and registers the head, apron and feet before and after interpolation. Runtime loads the resulting 97 frames from [asset notes](assets/README.md). The previous fixed foot center mismatched the reference stance. Independent image checks reduced the foot center's horizontal range from 21.98 to 0.82 source pixels; the largest adjacent-frame foot change is 0.013 source pixels. The build refuses an incomplete registered frame set. Run `tools/check-registration.swift` with the desktop folder and `--check-lift-v3` after compiling it to verify the artifact sequence; the report is saved under `previews/registration-v0.4.6.json`.
+Version 0.4.6 fixes lateral sliding in those new poses. The builder now derives placement from the original artwork and registers the head, apron and feet before and after interpolation. Runtime loads the resulting 97 frames from [assets/lift-v3](assets/lift-v3/PROVENANCE.md). The previous fixed foot center mismatched the reference stance. Independent image checks reduced the foot center's horizontal range from 21.98 to 0.82 source pixels; the largest adjacent-frame foot change is 0.013 source pixels. The build refuses an incomplete registered frame set. Run `tools/check-registration.swift` with the desktop folder and `--check-lift-v3` after compiling it to verify the artifact sequence; the report is saved under `previews/registration-v0.4.6.json`.
 
 ## Implementation and checks
 
@@ -67,7 +97,7 @@ for the current greeting. The window has no background card or rectangular shado
 
 Dynamic speech: choose **Connect Doubao Voice…** and enter your Volcengine Speech API Key in the secure local input. It stays in memory; no local TTS service is needed. Choose **Test Voice (Uses API)** to hear one short sample, billed by your API account. New direct replies in a bound conversation are read automatically; `[whale]` opts in one turn elsewhere. See [voice bridge](../harness-voice/README.md) for installation, interruption and latency measurements.
 
-Proactive controls now include **Do Not Disturb**, **Proactive Voice**, **Companion Check-ins**, **Follow Next Conversation**, **Quiet Hours…** and **Recent Messages**. Voice/check-ins are opt-in. DND suppresses proactive events, while direct replies remain available unless global Sound is off. See [implementation and validation](../harness-voice/README.md).
+Proactive controls now include **Do Not Disturb**, **Proactive Voice**, **Companion Check-ins**, **Follow Next Conversation**, **Quiet Hours…** and **Recent Messages**. Voice/check-ins are opt-in. DND suppresses proactive events, while direct replies remain available unless global Sound is off. See [implementation and validation](../harness-voice/review/主动交互实现记录.md).
 
 ## Doubao streaming voice (desktop v0.4.3)
 
@@ -85,7 +115,7 @@ The bundled greeting/poke/head-pat MP3 files remain offline assets from the prev
 
 `--self-test` covers the official request contract, documented wire fixtures, strict lengths/compression/session IDs, multiple text fragments in one session with audio before input ends, bounded audio, cancellation, DND interruption, rejected-key removal, disconnect and redirect refusal using mock WebSocket/audio. `--pcm-audio-check` separately plays the bundled welcome through the real audio engine. Real Doubao latency and account permission still require an authorized API key.
 
-See [Doubao setup](../../README.md#build-and-setup). The existing v0.3.0 Harness plugin remains compatible and needs no reinstall. Legacy Mira transport is retained only for regression/compatibility code; the default desktop has no automatic fallback to it.
+See [Doubao setup](../豆包TTS接入说明.md). The existing v0.3.0 Harness plugin remains compatible and needs no reinstall. Legacy Mira transport is retained only for regression/compatibility code; the default desktop has no automatic fallback to it.
 
 Version 0.4.1 adds Command-V/Command-A and an explicit Paste button to the secure key input. Manual preview failures show a diagnostic alert with separate HTTP 401/403 messages. One live fixed-phrase run completed: first packet ~0.88 s, player start ~1.14 s; this excludes Harness generation and is not acoustic onset. The user confirmed normal operation.
 
@@ -119,13 +149,13 @@ Assets and original generation prompts are in `assets/emotions-v1/`; `tools/buil
 
 The full-body artwork currently contains a baked-in tail. Idle and head-pat animations no longer warp the lower-right tail region. Its mesh stays still while blinking, breathing and upper hair motion continue. Elastic tail motion requires a separate tail layer with a covered attachment or registered whole-character animation frames.
 
-### Layered tail (v0.5.1)
+### Layered tail (v0.5.3)
 
 The tail is separated from the original character into a rear layer. Its root stays fixed under the skirt; a small root rotation and a delayed distal rotation move only tail vertices. The cycle is 4.8 seconds, with root/tip amplitudes of approximately 1.8/1.4 degrees and a 0.42-second tip phase lag. The original visible art is retained; built-in imagegen supplies a small hidden-root patch. No clothing, legs or hair are driven by the tail rig. Idle Motion eases the movement on/off. Greeting frames retain their existing full-character tail, with a short settle before switching and a gradual restart afterward.
 
 `--export-tail /absolute/output/folder` exports silent layer checks and an animated preview. The checks verify root anchoring, continuous tip movement, and pixel reconstruction of the neutral original. Source and prompt: `assets/tail-v1/`. This supersedes the static-tail correction.
 
-### Hidden hair and readable expressions (v0.5.2)
+### Hidden hair and readable expressions (v0.5.3)
 
 A stationary reconstructed hair patch now sits behind the moving tail and original foreground, filling the previously occluded area. Its top/left edges are feathered under the original hair and skirt. Head pats smoothly increase both tail-joint amplitudes to 2.5 times idle, then restore idle movement.
 

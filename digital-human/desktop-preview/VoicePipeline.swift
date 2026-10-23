@@ -160,6 +160,8 @@ final class VoicePipeline: NSObject, AVAudioPlayerDelegate {
     var onCallState: (([String: Any]) -> Void)?
     var onNativeMessage: (([String:Any]) -> Void)?
     var onHeartbeat: (() -> Void)?
+    var onShowCompanion: (() -> Void)?
+    var onHideCompanion: (() -> Void)?
     func sendNative(_ message: [String:Any]) { socket.send(message) }
     var onAcknowledgement: ((String, String) -> Void)?
     var onInbox: (([String: Any]) -> Void)?
@@ -183,6 +185,7 @@ final class VoicePipeline: NSObject, AVAudioPlayerDelegate {
         var state = proactiveSettings.snapshot(playing: isPlaying)
         state["voiceProtocol"] = 1
         state["bodyProtocol"] = 1
+        state["visibilityProtocol"] = 1
         state["bodyActions"] = body.actions
         state["voiceReady"] = provider == .doubao && !password.isEmpty && !muted && proactiveSettings.visible
         socket.send(state)
@@ -344,6 +347,8 @@ final class VoicePipeline: NSObject, AVAudioPlayerDelegate {
     }
     func receive(_ object: [String: Any]) {
         guard let kind = object["type"] as? String else { return }
+        if kind == "show_companion" { onShowCompanion?(); return }
+        if kind == "hide_companion" { onHideCompanion?(); return }
         if kind == "native_state" { onNativeMessage?(object); return }
         if kind == "body_action" {
             if let result = body.receive(object) { socket.send(result) }

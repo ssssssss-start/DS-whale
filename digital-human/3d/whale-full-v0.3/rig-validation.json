@@ -1,0 +1,17 @@
+{
+  "source_vertices": 1383928,
+  "runtime_vertices": 1383928,
+  "bones": 16,
+  "clips": [
+    "Idle",
+    "Turn_360",
+    "Wave",
+    "Walk_In_Place",
+    "Listening",
+    "Thinking",
+    "Tail_Swish"
+  ],
+  "all_weighted": true,
+  "original_topology_preserved": true,
+  "reduction_applied": false
+}
